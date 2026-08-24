@@ -64,6 +64,7 @@ import NotificationCenter from './pages/NotificationCenter';
 import SubscriptionPlans from './components/billing/SubscriptionPlans';
 import PaymentMethod from './components/billing/PaymentMethod';
 import PaymentPage from './components/billing/PaymentPage';
+import UsersAdmin from './components/super-admin/UsersAdmin';
 
 const App: React.FC = () => {
   // Mock user for sidebar display
@@ -187,9 +188,19 @@ const App: React.FC = () => {
 
             </Layout>
             
-           
+           } />
+
+
+
+        <Route path="/manage-users" element={
+            <Layout>
+
+               <UsersAdmin />
+
+            </Layout>
             
-            } />
+           } />
+
           
           {/* Student Dashboard */}
           <Route

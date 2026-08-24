@@ -8,9 +8,11 @@ import {
   Upload, School, Hash, Send, CheckCircle, UserCircle, 
   Briefcase, PhoneCall, MessageCircle, Smartphone as SmartphoneIcon,
   CreditCard as CreditCardIcon, Building, Globe, Home,
-  File,
+  File, Image, Paperclip, Download, Printer, ChevronDown, Award,
+  Phone as PhoneIcon
 } from 'lucide-react';
-import { paymentService } from '../../api/schoolApi';
+import { useAuth } from '../../context/AuthContext';
+import { paymentService, schoolService, subscriptionService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 
 interface PaymentFormData {
@@ -21,12 +23,14 @@ interface PaymentFormData {
   amount: number;
   planId: number;
   planName: string;
+  planDisplayName: string;
   telecomCompany: string;
   transactionReference: string;
   attachment: File | null;
   attachmentName: string;
   attachmentBase64: string;
   notes: string;
+  isTrial: boolean;
 }
 
 interface TransactionStage {
@@ -63,25 +67,91 @@ interface TeslaTransaction {
   completed_at: string;
 }
 
+interface School {
+  id: number;
+  name: string;
+  school_code: string;
+  email: string;
+  phone: string;
+  plan: string;
+  status: string;
+  admin_name: string;
+  admin_email: string;
+}
+
+interface Plan {
+  id: number;
+  name: string;
+  display_name: string;
+  price: number;
+  currency: string;
+  billing_period: string;
+  trial_days: number;
+}
+
 const PaymentPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
   const state = location.state as { planId?: number; planName?: string; price?: number } || {};
   
+  // Static plans data - No limits
+  const staticPlans: Plan[] = [
+    {
+      id: 1,
+      name: 'starter',
+      display_name: 'Basic',
+      price: 15000,
+      currency: 'TZS',
+      billing_period: 'monthly',
+      trial_days: 0
+    },
+    {
+      id: 2,
+      name: 'professional',
+      display_name: 'Premium',
+      price: 35000,
+      currency: 'TZS',
+      billing_period: 'monthly',
+      trial_days: 14
+    },
+    {
+      id: 3,
+      name: 'enterprise',
+      display_name: 'Enterprise',
+      price: 75000,
+      currency: 'TZS',
+      billing_period: 'monthly',
+      trial_days: 30
+    },
+    {
+      id: 4,
+      name: 'trial',
+      display_name: 'Trial',
+      price: 0,
+      currency: 'TZS',
+      billing_period: 'monthly',
+      trial_days: 30
+    }
+  ];
+
+  const [availablePlans, setAvailablePlans] = useState<Plan[]>(staticPlans);
   const [formData, setFormData] = useState<PaymentFormData>({
     schoolName: '',
     schoolCode: '',
     email: '',
     phone: '',
     amount: state.price || 0,
-    planId: state.planId || 0,
-    planName: state.planName || '',
+    planId: state.planId || 2,
+    planName: state.planName || 'professional',
+    planDisplayName: state.planName || 'Premium',
     telecomCompany: '',
     transactionReference: '',
     attachment: null,
     attachmentName: '',
     attachmentBase64: '',
     notes: '',
+    isTrial: false,
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -95,6 +165,12 @@ const PaymentPage: React.FC = () => {
   const [savedTransaction, setSavedTransaction] = useState<TeslaTransaction | null>(null);
   const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
   const [whatsappNumber] = useState('+255742578691');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSchool, setIsLoadingSchool] = useState(false);
+  const [schoolData, setSchoolData] = useState<School | null>(null);
+  const [currentUserPlan, setCurrentUserPlan] = useState<string>('');
+  const [showPaymentProcedures, setShowPaymentProcedures] = useState(false);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
 
   // Telecom companies with React Icons
   const telecomCompanies = [
@@ -103,42 +179,90 @@ const PaymentPage: React.FC = () => {
       name: 'Vodacom', 
       icon: <SmartphoneIcon className="w-5 h-5 text-green-600" />,
       color: 'bg-green-100 border-green-300 text-green-700',
-      ussd: '*150*00#'
+      ussd: '*150*00#',
+      procedures: [
+        'Dial *150*00# on your Vodacom phone',
+        'Select "Pay" option',
+        'Enter the amount shown above',
+        'Enter the transaction reference',
+        'Confirm the payment',
+        'Wait for confirmation SMS'
+      ]
     },
     { 
       id: 'tigo', 
       name: 'Tigo', 
       icon: <SmartphoneIcon className="w-5 h-5 text-red-600" />,
       color: 'bg-red-100 border-red-300 text-red-700',
-      ussd: '*150*01#'
+      ussd: '*150*01#',
+      procedures: [
+        'Dial *150*01# on your Tigo phone',
+        'Select "Pay Bills" option',
+        'Enter the amount shown above',
+        'Enter the transaction reference',
+        'Confirm the payment',
+        'Wait for confirmation SMS'
+      ]
     },
     { 
       id: 'airtel', 
       name: 'Airtel', 
       icon: <SmartphoneIcon className="w-5 h-5 text-yellow-600" />,
       color: 'bg-yellow-100 border-yellow-300 text-yellow-700',
-      ussd: '*150*60#'
+      ussd: '*150*60#',
+      procedures: [
+        'Dial *150*60# on your Airtel phone',
+        'Select "Payment" option',
+        'Enter the amount shown above',
+        'Enter the transaction reference',
+        'Confirm the payment',
+        'Wait for confirmation SMS'
+      ]
     },
     { 
       id: 'halotel', 
       name: 'Halotel', 
       icon: <SmartphoneIcon className="w-5 h-5 text-blue-600" />,
       color: 'bg-blue-100 border-blue-300 text-blue-700',
-      ussd: '*150*88#'
+      ussd: '*150*88#',
+      procedures: [
+        'Dial *150*88# on your Halotel phone',
+        'Select "Pay" option',
+        'Enter the amount shown above',
+        'Enter the transaction reference',
+        'Confirm the payment',
+        'Wait for confirmation SMS'
+      ]
     },
     { 
       id: 'ttcl', 
       name: 'TTCL', 
-      icon: <Phone className="w-5 h-5 text-purple-600" />,
+      icon: <PhoneIcon className="w-5 h-5 text-purple-600" />,
       color: 'bg-purple-100 border-purple-300 text-purple-700',
-      ussd: '*150*44#'
+      ussd: '*150*44#',
+      procedures: [
+        'Dial *150*44# on your TTCL phone',
+        'Select "Payment" option',
+        'Enter the amount shown above',
+        'Enter the transaction reference',
+        'Confirm the payment',
+        'Wait for confirmation SMS'
+      ]
     },
     { 
       id: 'zantel', 
       name: 'Zantel', 
       icon: <SmartphoneIcon className="w-5 h-5 text-orange-600" />,
       color: 'bg-orange-100 border-orange-300 text-orange-700',
-      ussd: '*150*02#'
+      ussd: '*150*02#',
+      procedures: [
+        'Dial *150*02# on your Zantel phone',
+        'Select "Pay Bills" option',
+        'Enter the amount shown above',
+        'Enter the transaction reference',
+        'Confirm the payment',
+        'Wait for confirmation SMS'
+      ]
     },
   ];
 
@@ -211,15 +335,99 @@ const PaymentPage: React.FC = () => {
       const stages = getTransactionStages();
       setTransactionStages(stages.map(s => ({ ...s, status: 'pending' as const })));
       setCurrentStage(0);
+      setShowPaymentProcedures(true);
+    } else {
+      setShowPaymentProcedures(false);
     }
   }, [formData.telecomCompany]);
 
+  // Fetch school data from authenticated user
+  useEffect(() => {
+    const fetchSchoolData = async () => {
+      if (!isAuthenticated || !user) {
+        return;
+      }
+
+      setIsLoadingSchool(true);
+      try {
+        const userEmail = user.email;
+        console.log('[PaymentPage] Fetching school for user:', userEmail);
+
+        const response = await schoolService.getSchools({ 
+          admin_email: userEmail,
+          page_size: 1
+        });
+        console.log('[PaymentPage] School response:', response);
+
+        let schoolDataList = [];
+        if (response.results) {
+          schoolDataList = response.results;
+        } else if (Array.isArray(response)) {
+          schoolDataList = response;
+        }
+
+        if (schoolDataList && schoolDataList.length > 0) {
+          const school = schoolDataList[0];
+          setSchoolData(school);
+          
+          if (school.plan) {
+            setCurrentUserPlan(school.plan);
+          }
+          
+          setFormData(prev => ({
+            ...prev,
+            schoolName: school.name || '',
+            schoolCode: school.school_code || '',
+            email: school.admin_email || user.email || '',
+            phone: school.phone || '',
+          }));
+
+          toast.success('School data loaded successfully!');
+        } else {
+          console.log('[PaymentPage] No school found for user');
+          toast.info('No school found. Please register your school first.');
+        }
+      } catch (error: any) {
+        console.error('[PaymentPage] Failed to fetch school:', error);
+        toast.error(error.response?.data?.message || 'Failed to load school data');
+      } finally {
+        setIsLoadingSchool(false);
+      }
+    };
+
+    fetchSchoolData();
+  }, [isAuthenticated, user]);
+
+  // Handle plan selection
+  const handlePlanSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const planId = parseInt(e.target.value);
+    const selectedPlan = availablePlans.find(p => p.id === planId);
+    
+    if (selectedPlan) {
+      setFormData(prev => ({
+        ...prev,
+        planId: selectedPlan.id,
+        planName: selectedPlan.name,
+        planDisplayName: selectedPlan.display_name,
+        amount: selectedPlan.price,
+        isTrial: selectedPlan.name === 'trial',
+      }));
+      
+      if (selectedPlan.name === 'trial') {
+        toast.info('Trial plan selected - 30 days free!');
+      } else {
+        toast.success(`${selectedPlan.display_name} selected - ${formatCurrency(selectedPlan.price)} / ${selectedPlan.billing_period}`);
+      }
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
     
     setFormData(prev => ({
       ...prev,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
     
     if (errors[name]) {
@@ -241,7 +449,6 @@ const PaymentPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        // Convert to base64
         const base64 = await fileToBase64(file);
         
         setFormData(prev => ({
@@ -283,8 +490,8 @@ const PaymentPage: React.FC = () => {
     if (!formData.phone || formData.phone.replace(/\D/g, '').length < 10) {
       newErrors.phone = 'Please enter a valid phone number';
     }
-    if (!formData.amount || formData.amount <= 0) {
-      newErrors.amount = 'Please enter the amount';
+    if (!formData.planId || formData.planId === 0) {
+      newErrors.planId = 'Please select a plan';
     }
     if (!formData.telecomCompany) {
       newErrors.telecomCompany = 'Please select a telecom company';
@@ -305,86 +512,116 @@ const PaymentPage: React.FC = () => {
     }).format(amount);
   };
 
-  // Save transaction to backend
-  const saveTransaction = async () => {
+  // Save transaction to backend - FIXED: Only send plan_name
+  const saveTransactionToBackend = async () => {
+    setIsSaving(true);
     try {
+      // Find the selected plan to get its name
+      const selectedPlan = availablePlans.find(p => p.id === formData.planId);
+      
       const payload: any = {
         school_code: formData.schoolCode,
         admin_email: formData.email,
         admin_name: formData.schoolName,
         admin_phone: formData.phone,
-        amount: formData.amount,
+        amount: formData.isTrial ? 0 : Number(formData.amount),
         payment_method: formData.telecomCompany,
         telecom_provider: formData.telecomCompany,
         transaction_reference: formData.transactionReference,
         notes: formData.notes || '',
+        // SEND ONLY plan_name - NOT plan_id
+        plan_name: selectedPlan?.name || formData.planName || 'professional',
       };
 
-      if (formData.planId) {
-        payload.plan_id = formData.planId;
-      }
-      if (formData.planName) {
-        payload.plan_name = formData.planName;
+      if (formData.isTrial) {
+        payload.is_trial = true;
       }
 
-      // Send file as base64 if available
       if (formData.attachmentBase64) {
         payload.receipt_attachment_base64 = formData.attachmentBase64;
         payload.receipt_filename = formData.attachmentName;
       }
 
-      console.log('[PaymentPage] Sending payload:', payload);
+      console.log('[PaymentPage] Sending payload to backend:', JSON.stringify(payload, null, 2));
 
       const response = await paymentService.createTransaction(payload);
-      console.log('[PaymentPage] Transaction saved:', response);
+      console.log('[PaymentPage] Backend response:', response);
+
+      let transactionData;
+      if (response && response.data) {
+        transactionData = response.data;
+      } else if (response && response.data && response.data.data) {
+        transactionData = response.data.data;
+      } else {
+        transactionData = response;
+      }
+
+      console.log('[PaymentPage] Transaction data:', transactionData);
+
+      setTransactionId(transactionData.id);
+      setSavedTransaction(transactionData);
       
-      setTransactionId(response.data.id);
-      setSavedTransaction(response.data);
-      
-      return response.data;
+      toast.success('Transaction saved successfully!');
+      return transactionData;
+
     } catch (error: any) {
-      console.error('[PaymentPage] Failed to save transaction:', error);
       
-      // If 404, show the URL issue
       if (error.response?.status === 404) {
         toast.error('Payment endpoint not found. Please check the URL configuration.');
+      } else if (error.response?.status === 400) {
+        const errorData = error.response?.data;
+        if (typeof errorData === 'object') {
+          const firstKey = Object.keys(errorData)[0];
+          const message = errorData[firstKey];
+          if (Array.isArray(message)) {
+            toast.error(`${firstKey}: ${message[0]}`);
+          } else if (typeof message === 'string') {
+            toast.error(message);
+          } else {
+            toast.error('Invalid data provided. Please check your input.');
+          }
+        } else {
+          toast.error(errorData || 'Invalid data provided');
+        }
+      } else if (error.response?.status === 500) {
+        toast.error('Server error. Please try again later.');
       } else {
-        toast.error(error.response?.data?.message || 'Failed to save transaction');
+        toast.error(error.response?.data?.message || error.message || 'Failed to save transaction');
       }
       throw error;
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // Send data via WhatsApp
   const sendWhatsAppMessage = () => {
     const message = `
-📋 *PAYMENT CONFIRMATION*
+PAYMENT CONFIRMATION
 
-*Transaction Details:*
-🏫 School: ${formData.schoolName}
-📝 School Code: ${formData.schoolCode}
-📧 Email: ${formData.email}
-📱 Phone: ${formData.phone}
-💰 Amount: ${formatCurrency(formData.amount)}
-📋 Plan: ${formData.planName || 'N/A'}
-📡 Telecom: ${formData.telecomCompany}
-🔢 Reference: ${formData.transactionReference}
-📎 Attachment: ${formData.attachmentName || 'None'}
+Transaction Details:
+School: ${formData.schoolName}
+School Code: ${formData.schoolCode}
+Email: ${formData.email}
+Phone: ${formData.phone}
+Amount: ${formData.isTrial ? 'FREE (Trial)' : formatCurrency(formData.amount)}
+Plan: ${formData.isTrial ? 'TRIAL' : formData.planDisplayName || formData.planName}
+Telecom: ${formData.telecomCompany}
+Reference: ${formData.transactionReference}
+Attachment: ${formData.attachmentName || 'None'}
+Type: ${formData.isTrial ? 'Trial Subscription' : 'Paid Subscription'}
 
-*Transaction Code:* ${savedTransaction?.transaction_code || paymentReference}
-*Status:* ✅ Completed
-*Date:* ${new Date().toLocaleString()}
+Transaction Code: ${savedTransaction?.transaction_code || paymentReference}
+Status: Completed
+Date: ${new Date().toLocaleString()}
 
 Thank you for your payment!
     `.trim();
 
-    // Encode message for WhatsApp
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${whatsappNumber.replace('+', '')}?text=${encodedMessage}`;
     
-    // Open WhatsApp in new window
     window.open(whatsappUrl, '_blank');
-    
     toast.success('Opening WhatsApp to send confirmation...');
   };
 
@@ -399,20 +636,17 @@ Thank you for your payment!
     setShowConfirmation(true);
 
     try {
-      // 1. Save transaction to backend
-      const transaction = await saveTransaction();
+      const transaction = await saveTransactionToBackend();
       
-      if (!transaction) {
+      if (!transaction || !transaction.id) {
         throw new Error('Failed to create transaction');
       }
 
-      // 2. Simulate transaction stages
       let stageIndex = 0;
       const stages = transactionStages;
       
-      const interval = setInterval(async () => {
+      const interval = setInterval(() => {
         if (stageIndex < stages.length) {
-          // Update current stage to processing
           setTransactionStages(prev => 
             prev.map((s, idx) => ({
               ...s,
@@ -421,7 +655,6 @@ Thank you for your payment!
           );
           setCurrentStage(stageIndex);
           
-          // After 2 seconds, mark as completed
           setTimeout(() => {
             setTransactionStages(prev => 
               prev.map((s, idx) => ({
@@ -437,8 +670,9 @@ Thank you for your payment!
               setTransactionComplete(true);
               setIsProcessing(false);
               
-              // Show final confirmation modal
-              setShowFinalConfirmation(true);
+              setTimeout(() => {
+                setShowFinalConfirmation(true);
+              }, 500);
               
               toast.success('Payment completed successfully!');
             }
@@ -454,13 +688,32 @@ Thank you for your payment!
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    startTransaction();
+    await startTransaction();
   };
 
   // Get selected telecom
   const selectedTelecom = telecomCompanies.find(t => t.id === formData.telecomCompany);
+  const selectedPlan = availablePlans.find(p => p.id === formData.planId);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Lock className="w-12 h-12 text-secondary-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-secondary-900">Please Login</h3>
+          <p className="text-secondary-500">You need to be logged in to make payments</p>
+          <button
+            onClick={() => navigate('/login')}
+            className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">
@@ -483,30 +736,16 @@ Thank you for your payment!
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form Section */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl border border-secondary-200 p-6">
-            {!showConfirmation ? (
+            {isLoadingSchool ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+                <span className="ml-2 text-secondary-500">Loading school data...</span>
+              </div>
+            ) : !showConfirmation ? (
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Plan Summary */}
-                {formData.planName && (
-                  <div className="bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-primary-900">Selected Plan</p>
-                        <h3 className="text-lg font-bold text-primary-900">{formData.planName}</h3>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-primary-700">Amount</p>
-                        <p className="text-xl font-bold text-primary-900">
-                          {formatCurrency(formData.amount)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* School Information */}
+                {/* School Information - Auto-filled */}
                 <div>
                   <h3 className="text-sm font-medium text-secondary-900 mb-3 flex items-center gap-2">
                     <School className="w-4 h-4 text-primary-600" />
@@ -528,6 +767,7 @@ Thank you for your payment!
                           className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                             errors.schoolName ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
                           }`}
+                          disabled={isLoadingSchool}
                         />
                       </div>
                       {errors.schoolName && (
@@ -549,6 +789,7 @@ Thank you for your payment!
                           className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                             errors.schoolCode ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
                           }`}
+                          disabled={isLoadingSchool}
                         />
                       </div>
                       {errors.schoolCode && (
@@ -558,7 +799,7 @@ Thank you for your payment!
                   </div>
                 </div>
 
-                {/* Contact Information */}
+                {/* Contact Information - Auto-filled */}
                 <div>
                   <h3 className="text-sm font-medium text-secondary-900 mb-3 flex items-center gap-2">
                     <User className="w-4 h-4 text-primary-600" />
@@ -580,6 +821,7 @@ Thank you for your payment!
                           className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                             errors.email ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
                           }`}
+                          disabled={isLoadingSchool}
                         />
                       </div>
                       {errors.email && (
@@ -601,6 +843,7 @@ Thank you for your payment!
                           className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                             errors.phone ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
                           }`}
+                          disabled={isLoadingSchool}
                         />
                       </div>
                       {errors.phone && (
@@ -608,6 +851,95 @@ Thank you for your payment!
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Plan Selection - Dropdown */}
+                <div>
+                  <h3 className="text-sm font-medium text-secondary-900 mb-3 flex items-center gap-2">
+                    <CreditCardIcon className="w-4 h-4 text-primary-600" />
+                    Select Plan <span className="text-red-500">*</span>
+                  </h3>
+                  
+                  <div>
+                    <select
+                      name="planId"
+                      value={formData.planId}
+                      onChange={handlePlanSelect}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white ${
+                        errors.planId ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                      }`}
+                    >
+                      {availablePlans.map((plan) => {
+                        const isCurrentPlan = currentUserPlan && currentUserPlan === plan.name;
+                        
+                        return (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.display_name} - {plan.price === 0 ? 'FREE' : formatCurrency(plan.price)} / {plan.billing_period}
+                            {plan.name === 'trial' && ' (30 days free)'}
+                            {isCurrentPlan && ' (Current Plan)'}
+                            {plan.name === 'professional' && ' ★ Popular'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {errors.planId && (
+                      <p className="text-xs text-red-500 mt-1">{errors.planId}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Telecom Selection */}
+                <div>
+                  <h3 className="text-sm font-medium text-secondary-900 mb-3 flex items-center gap-2">
+                    <SmartphoneIcon className="w-4 h-4 text-primary-600" />
+                    Select Telecom <span className="text-red-500">*</span>
+                  </h3>
+                  
+                  <div>
+                    <select
+                      name="telecomCompany"
+                      value={formData.telecomCompany}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white ${
+                        errors.telecomCompany ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                      }`}
+                    >
+                      <option value="">Select Telecom Company</option>
+                      {telecomCompanies.map((telecom) => (
+                        <option key={telecom.id} value={telecom.id}>
+                          {telecom.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.telecomCompany && (
+                      <p className="text-xs text-red-500 mt-1">{errors.telecomCompany}</p>
+                    )}
+                  </div>
+
+                  {/* Payment Procedures - Show when telecom is selected */}
+                  {showPaymentProcedures && selectedTelecom && (
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                        <PhoneCall className="w-4 h-4" />
+                        Payment Procedure for {selectedTelecom.name}
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedTelecom.procedures.map((procedure, index) => (
+                          <div key={index} className="flex items-start gap-3 text-sm text-blue-700">
+                            <span className="inline-flex items-center justify-center w-5 h-5 bg-blue-200 rounded-full text-blue-800 text-xs font-bold flex-shrink-0 mt-0.5">
+                              {index + 1}
+                            </span>
+                            <span>{procedure}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 p-2 bg-blue-100 rounded border border-blue-200">
+                        <p className="text-xs text-blue-800 font-medium">
+                          USSD Code: <span className="font-mono">{selectedTelecom.ussd}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Details */}
@@ -620,21 +952,22 @@ Thank you for your payment!
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-secondary-700 mb-1">
-                          Amount <span className="text-red-500">*</span>
+                          Amount {formData.isTrial && <span className="text-green-600 ml-1">(Free Trial)</span>}
                         </label>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                           <input
-                            type="number"
+                            type="text"
                             name="amount"
                             value={formData.amount}
                             onChange={handleInputChange}
                             placeholder="Enter amount"
                             className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                               errors.amount ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                            }`}
+                            } ${formData.isTrial ? 'bg-secondary-50' : ''}`}
                             min="0"
                             step="100"
+                            disabled={formData.isTrial || isLoadingSchool}
                           />
                         </div>
                         {errors.amount && (
@@ -643,48 +976,25 @@ Thank you for your payment!
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-secondary-700 mb-1">
-                          Telecom Company <span className="text-red-500">*</span>
+                          Transaction Reference <span className="text-red-500">*</span>
                         </label>
-                        <select
-                          name="telecomCompany"
-                          value={formData.telecomCompany}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                            errors.telecomCompany ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                          }`}
-                        >
-                          <option value="">Select Telecom</option>
-                          {telecomCompanies.map((telecom) => (
-                            <option key={telecom.id} value={telecom.id}>
-                              {telecom.name}
-                            </option>
-                          ))}
-                        </select>
-                        {errors.telecomCompany && (
-                          <p className="text-xs text-red-500 mt-1">{errors.telecomCompany}</p>
+                        <div className="relative">
+                          <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                          <input
+                            type="text"
+                            name="transactionReference"
+                            value={formData.transactionReference}
+                            onChange={handleInputChange}
+                            placeholder="Enter transaction reference number"
+                            className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                              errors.transactionReference ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                            }`}
+                          />
+                        </div>
+                        {errors.transactionReference && (
+                          <p className="text-xs text-red-500 mt-1">{errors.transactionReference}</p>
                         )}
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-secondary-700 mb-1">
-                        Transaction Reference <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                        <input
-                          type="text"
-                          name="transactionReference"
-                          value={formData.transactionReference}
-                          onChange={handleInputChange}
-                          placeholder="Enter transaction reference number"
-                          className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                            errors.transactionReference ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                          }`}
-                        />
-                      </div>
-                      {errors.transactionReference && (
-                        <p className="text-xs text-red-500 mt-1">{errors.transactionReference}</p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -770,7 +1080,7 @@ Thank you for your payment!
                   ) : (
                     <>
                       <CreditCard className="w-4 h-4" />
-                      Proceed with Payment
+                      {formData.isTrial ? 'Start Free Trial' : 'Proceed with Payment'}
                     </>
                   )}
                 </button>
@@ -852,11 +1162,11 @@ Thank you for your payment!
                             : 'text-secondary-400'
                         }`}>
                           {stage.status === 'completed' 
-                            ? '✓ Completed' 
+                            ? 'Completed' 
                             : stage.status === 'processing'
                             ? 'Processing...'
                             : stage.status === 'failed'
-                            ? '✗ Failed'
+                            ? 'Failed'
                             : stage.description}
                         </p>
                       </div>
@@ -893,7 +1203,6 @@ Thank you for your payment!
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Order Summary */}
           <div className="bg-white rounded-xl border border-secondary-200 p-6">
             <h3 className="font-semibold text-secondary-900 mb-4">Payment Summary</h3>
             <div className="space-y-3">
@@ -906,7 +1215,7 @@ Thank you for your payment!
               <div className="flex justify-between text-sm">
                 <span className="text-secondary-500">Plan</span>
                 <span className="font-medium text-secondary-900">
-                  {formData.planName || 'N/A'}
+                  {formData.isTrial ? 'TRIAL' : (formData.planDisplayName || formData.planName || 'N/A')}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -918,15 +1227,17 @@ Thank you for your payment!
               <div className="border-t border-secondary-200 pt-3">
                 <div className="flex justify-between">
                   <span className="text-secondary-900 font-medium">Total</span>
-                  <span className="text-xl font-bold text-primary-600">
-                    {formatCurrency(formData.amount)}
+                  <span className={`text-xl font-bold ${formData.isTrial ? 'text-green-600' : 'text-primary-600'}`}>
+                    {formData.isTrial ? 'FREE' : formatCurrency(formData.amount)}
                   </span>
                 </div>
+                {formData.isTrial && (
+                  <p className="text-xs text-green-600 mt-1 text-right">30 days free trial</p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Security Info */}
           <div className="bg-white rounded-xl border border-secondary-200 p-6">
             <h3 className="font-semibold text-secondary-900 mb-3">Security</h3>
             <div className="space-y-3">
@@ -947,7 +1258,6 @@ Thank you for your payment!
             </div>
           </div>
 
-          {/* Supported Telecoms */}
           <div className="bg-white rounded-xl border border-secondary-200 p-6">
             <h4 className="text-sm font-medium text-secondary-900 mb-3">Supported Telecoms</h4>
             <div className="flex flex-wrap gap-2">
@@ -975,10 +1285,12 @@ Thank you for your payment!
               </div>
               
               <h2 className="text-2xl font-bold text-secondary-900 mb-2">
-                Payment Confirmed!
+                {formData.isTrial ? 'Trial Started!' : 'Payment Confirmed!'}
               </h2>
               <p className="text-secondary-500 text-sm mb-4">
-                Your payment has been successfully processed.
+                {formData.isTrial 
+                  ? 'Your 30-day free trial has been activated successfully.'
+                  : 'Your payment has been successfully processed.'}
               </p>
 
               <div className="bg-secondary-50 rounded-lg p-4 text-left mb-6">
@@ -994,12 +1306,26 @@ Thank you for your payment!
                     <span className="font-medium text-secondary-900">{formData.schoolName}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-secondary-500">Plan:</span>
+                    <span className="font-medium text-secondary-900">
+                      {formData.isTrial ? 'TRIAL' : (formData.planDisplayName || formData.planName)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-secondary-500">Amount:</span>
-                    <span className="font-bold text-primary-600">{formatCurrency(formData.amount)}</span>
+                    <span className={`font-bold ${formData.isTrial ? 'text-green-600' : 'text-primary-600'}`}>
+                      {formData.isTrial ? 'FREE' : formatCurrency(formData.amount)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-secondary-500">Telecom:</span>
                     <span className="font-medium text-secondary-900">{selectedTelecom?.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-secondary-500">Type:</span>
+                    <span className={`font-medium ${formData.isTrial ? 'text-green-600' : 'text-primary-600'}`}>
+                      {formData.isTrial ? 'Trial' : 'Paid'}
+                    </span>
                   </div>
                 </div>
               </div>

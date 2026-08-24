@@ -4,61 +4,79 @@ import {
   ArrowLeft, Download, FileText, CheckCircle, XCircle, Clock, Eye,
   Plus, Search, Filter, Edit, Trash2, Save, X, Loader2,
   RefreshCw, AlertCircle, CreditCard, Calendar, DollarSign,
-  ChevronLeft, ChevronRight, Printer
+  ChevronLeft, ChevronRight, Printer,
+  File,
+  Phone,
+  PhoneCall,
+  Mail,
+  Hash,
+  User,
+  Building2,
+  Smartphone,
+  Tag,
+  Receipt,
+  ExternalLink,
+  Upload,
+  Lock
 } from 'lucide-react';
-import { subscriptionService } from '../../api/schoolApi';
+import { paymentService } from '../../api/schoolApi';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal';
 
 interface Payment {
   id: number;
-  subscription: number;
+  transaction_code: string;
   school: number;
-  school_name?: string;
-  user: number | null;
-  amount: number;
-  currency: string;
-  payment_method: string;
-  payment_provider: string;
-  status: string;
-  description: string;
-  invoice_number: string;
-  paid_at: string | null;
-  refunded_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Subscription {
-  id: number;
-  school: number;
+  school_code: string;
   school_name: string;
+  admin_email: string;
+  admin_name: string;
+  admin_phone: string;
   plan: number;
   plan_name: string;
-  plan_display_name: string;
+  plan_price: number;
+  currency: string;
+  amount: number;
+  payment_method: string;
+  telecom_provider: string;
+  transaction_reference: string;
   status: string;
+  current_stage: string;
+  stage_progress: number;
+  receipt_attachment: string;
+  receipt_filename: string;
+  initiated_at: string;
+  completed_at: string;
+  created_at: string;
+  updated_at: string;
+  notes?: string;
 }
 
 interface PaymentFormData {
+  school_code: string;
+  admin_email: string;
+  admin_name: string;
+  admin_phone: string;
   amount: number;
-  currency: string;
   payment_method: string;
-  payment_provider: string;
-  description: string;
-  status: string;
-  subscription_id: number;
+  telecom_provider: string;
+  transaction_reference: string;
+  notes: string;
+  plan_name: string;
+  receipt_attachment_base64?: string;
+  receipt_filename?: string;
 }
 
 const BillingHistory: React.FC = () => {
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   
   const [payments, setPayments] = useState<Payment[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -69,18 +87,24 @@ const BillingHistory: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   
   const [formData, setFormData] = useState<PaymentFormData>({
+    school_code: '',
+    admin_email: '',
+    admin_name: '',
+    admin_phone: '',
     amount: 0,
-    currency: 'TZS',
-    payment_method: 'card',
-    payment_provider: 'stripe',
-    description: '',
-    status: 'pending',
-    subscription_id: 0,
+    payment_method: 'vodacom',
+    telecom_provider: 'vodacom',
+    transaction_reference: '',
+    notes: '',
+    plan_name: 'professional',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentName, setAttachmentName] = useState('');
 
   const [stats, setStats] = useState({
     totalSpent: 0,
@@ -91,42 +115,20 @@ const BillingHistory: React.FC = () => {
     failedCount: 0,
   });
 
-  // Fetch subscriptions for the dropdown
-  const fetchSubscriptions = useCallback(async () => {
-    setIsLoadingSubscriptions(true);
-    try {
-      const response = await subscriptionService.getSubscriptions();
-      console.log('[BillingHistory] Subscriptions response:', response);
-      
-      let subData = [];
-      if (response.results) {
-        subData = response.results;
-      } else if (Array.isArray(response)) {
-        subData = response;
-      }
-      
-      setSubscriptions(subData);
-      
-      // If there's at least one subscription, set it as default
-      if (subData.length > 0) {
-        setFormData(prev => ({
-          ...prev,
-          subscription_id: subData[0].id
-        }));
-      }
-    } catch (error: any) {
-      console.error('[BillingHistory] Failed to fetch subscriptions:', error);
-      // Don't show toast error here, it's not critical
-    } finally {
-      setIsLoadingSubscriptions(false);
-    }
-  }, []);
+  // Get user email from auth context
+  const userEmail = user?.email || '';
 
-  // Fetch payments
+  // Fetch payments from Tesla API - filtered by admin_email
   const fetchPayments = useCallback(async () => {
+    if (!isAuthenticated || !userEmail) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const response = await subscriptionService.getPayments({ page_size: 100 });
+      // Fetch all transactions and filter by admin_email on frontend
+      const response = await paymentService.getTransactions({ page_size: 100 });
       console.log('[BillingHistory] Payments response:', response);
       
       let paymentData = [];
@@ -136,20 +138,26 @@ const BillingHistory: React.FC = () => {
         paymentData = response;
       }
       
-      setPayments(paymentData);
-      setFilteredPayments(paymentData);
-      
-      const paid = paymentData.filter((p: Payment) => 
-        p.status === 'paid' || p.status === 'completed'
+      // Filter transactions by admin_email (logged in user's email)
+      const userPayments = paymentData.filter(
+        (p: Payment) => p.admin_email?.toLowerCase() === userEmail.toLowerCase()
       );
-      const pending = paymentData.filter((p: Payment) => p.status === 'pending');
-      const failed = paymentData.filter((p: Payment) => p.status === 'failed');
+      
+      console.log('[BillingHistory] User payments:', userPayments);
+      
+      setPayments(userPayments);
+      setFilteredPayments(userPayments);
+      
+      // Calculate stats
+      const completed = userPayments.filter((p: Payment) => p.status === 'completed');
+      const pending = userPayments.filter((p: Payment) => p.status === 'pending' || p.status === 'processing');
+      const failed = userPayments.filter((p: Payment) => p.status === 'failed');
       
       setStats({
-        totalSpent: paid.reduce((acc: number, p: Payment) => acc + p.amount, 0),
-        totalInvoices: paymentData.length,
+        totalSpent: completed.reduce((acc: number, p: Payment) => acc + p.amount, 0),
+        totalInvoices: userPayments.length,
         pendingAmount: pending.reduce((acc: number, p: Payment) => acc + p.amount, 0),
-        paidCount: paid.length,
+        paidCount: completed.length,
         pendingCount: pending.length,
         failedCount: failed.length,
       });
@@ -160,13 +168,12 @@ const BillingHistory: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, userEmail]);
 
   // Load data on mount
   useEffect(() => {
     fetchPayments();
-    fetchSubscriptions();
-  }, [fetchPayments, fetchSubscriptions]);
+  }, [fetchPayments]);
 
   // Filter payments
   useEffect(() => {
@@ -175,10 +182,11 @@ const BillingHistory: React.FC = () => {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(p =>
-        p.description?.toLowerCase().includes(term) ||
-        p.invoice_number?.toLowerCase().includes(term) ||
+        p.school_name?.toLowerCase().includes(term) ||
+        p.transaction_code?.toLowerCase().includes(term) ||
+        p.transaction_reference?.toLowerCase().includes(term) ||
         p.payment_method?.toLowerCase().includes(term) ||
-        p.school_name?.toLowerCase().includes(term)
+        p.plan_name?.toLowerCase().includes(term)
       );
     }
     
@@ -196,14 +204,19 @@ const BillingHistory: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
+      school_code: '',
+      admin_email: userEmail || '',
+      admin_name: '',
+      admin_phone: '',
       amount: 0,
-      currency: 'TZS',
-      payment_method: 'card',
-      payment_provider: 'stripe',
-      description: '',
-      status: 'pending',
-      subscription_id: subscriptions.length > 0 ? subscriptions[0].id : 0,
+      payment_method: 'vodacom',
+      telecom_provider: 'vodacom',
+      transaction_reference: '',
+      notes: '',
+      plan_name: 'professional',
     });
+    setAttachmentFile(null);
+    setAttachmentName('');
     setFormErrors({});
   };
 
@@ -218,20 +231,71 @@ const BillingHistory: React.FC = () => {
     }
   };
 
+  // Convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const base64 = await fileToBase64(file);
+        setAttachmentFile(file);
+        setAttachmentName(file.name);
+        
+        setFormData(prev => ({
+          ...prev,
+          receipt_attachment_base64: base64,
+          receipt_filename: file.name,
+        }));
+        
+        toast.success(`File "${file.name}" uploaded successfully`);
+      } catch (error) {
+        console.error('Failed to convert file to base64:', error);
+        toast.error('Failed to process file');
+      }
+    }
+  };
+
+  const removeFile = () => {
+    setAttachmentFile(null);
+    setAttachmentName('');
+    setFormData(prev => ({
+      ...prev,
+      receipt_attachment_base64: '',
+      receipt_filename: '',
+    }));
+  };
+
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
     
+    if (!formData.school_code || formData.school_code.trim().length < 2) {
+      errors.school_code = 'School code is required';
+    }
+    if (!formData.admin_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.admin_email)) {
+      errors.admin_email = 'Please enter a valid email';
+    }
+    if (!formData.admin_phone || formData.admin_phone.replace(/\D/g, '').length < 10) {
+      errors.admin_phone = 'Please enter a valid phone number';
+    }
     if (!formData.amount || formData.amount <= 0) {
       errors.amount = 'Amount must be greater than 0';
     }
     if (!formData.payment_method) {
       errors.payment_method = 'Payment method is required';
     }
-    if (!formData.payment_provider) {
-      errors.payment_provider = 'Payment provider is required';
+    if (!formData.transaction_reference || formData.transaction_reference.trim().length < 3) {
+      errors.transaction_reference = 'Transaction reference is required';
     }
-    if (!formData.subscription_id || formData.subscription_id === 0) {
-      errors.subscription_id = 'Please select a subscription';
+    if (!formData.plan_name) {
+      errors.plan_name = 'Plan name is required';
     }
     
     setFormErrors(errors);
@@ -249,16 +313,14 @@ const BillingHistory: React.FC = () => {
     setIsSaving(true);
     try {
       const data = {
-        subscription_id: formData.subscription_id,
-        amount: formData.amount,
-        currency: formData.currency,
-        payment_method: formData.payment_method,
-        payment_provider: formData.payment_provider,
-        description: formData.description || '',
+        ...formData,
+        admin_email: userEmail, // Ensure admin_email is set to logged in user
       };
       
       console.log('[BillingHistory] Creating payment with data:', data);
-      await subscriptionService.createPayment(data);
+      const response = await paymentService.createTransaction(data);
+      console.log('[BillingHistory] Response:', response);
+      
       toast.success('Payment added successfully!');
       setIsAddModalOpen(false);
       resetForm();
@@ -267,7 +329,6 @@ const BillingHistory: React.FC = () => {
       console.error('[BillingHistory] Failed to add payment:', error);
       console.error('[BillingHistory] Error response:', error.response?.data);
       
-      // Show detailed error message
       const errorMessage = error.response?.data?.message || 
                           error.response?.data?.error ||
                           'Failed to add payment';
@@ -289,14 +350,14 @@ const BillingHistory: React.FC = () => {
     try {
       const data = {
         amount: formData.amount,
-        currency: formData.currency,
         payment_method: formData.payment_method,
-        payment_provider: formData.payment_provider,
-        description: formData.description,
-        status: formData.status,
+        telecom_provider: formData.telecom_provider,
+        transaction_reference: formData.transaction_reference,
+        notes: formData.notes,
+        status: 'pending',
       };
       
-      await subscriptionService.updatePayment(selectedPayment.id, data);
+      await paymentService.updateTransaction(selectedPayment.id, data);
       toast.success('Payment updated successfully!');
       setIsEditModalOpen(false);
       setSelectedPayment(null);
@@ -315,7 +376,7 @@ const BillingHistory: React.FC = () => {
     
     setIsDeleting(true);
     try {
-      await subscriptionService.deletePayment(selectedPayment.id);
+      await paymentService.deleteTransaction(selectedPayment.id);
       toast.success('Payment deleted successfully!');
       setIsDeleteModalOpen(false);
       setSelectedPayment(null);
@@ -331,15 +392,23 @@ const BillingHistory: React.FC = () => {
   const openEditModal = (payment: Payment) => {
     setSelectedPayment(payment);
     setFormData({
+      school_code: payment.school_code || '',
+      admin_email: payment.admin_email || userEmail || '',
+      admin_name: payment.admin_name || '',
+      admin_phone: payment.admin_phone || '',
       amount: payment.amount,
-      currency: payment.currency || 'TZS',
-      payment_method: payment.payment_method || 'card',
-      payment_provider: payment.payment_provider || 'stripe',
-      description: payment.description || '',
-      status: payment.status || 'pending',
-      subscription_id: payment.subscription,
+      payment_method: payment.payment_method || 'vodacom',
+      telecom_provider: payment.telecom_provider || 'vodacom',
+      transaction_reference: payment.transaction_reference || '',
+      notes: payment.notes || '',
+      plan_name: payment.plan_name || 'professional',
     });
     setIsEditModalOpen(true);
+  };
+
+  const openViewModal = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setIsViewModalOpen(true);
   };
 
   const openDeleteModal = (payment: Payment) => {
@@ -349,14 +418,15 @@ const BillingHistory: React.FC = () => {
 
   const getStatusIcon = (status: string) => {
     switch(status) {
-      case 'paid':
       case 'completed':
         return <CheckCircle className="w-4 h-4 text-green-600" />;
       case 'pending':
         return <Clock className="w-4 h-4 text-yellow-600" />;
+      case 'processing':
+        return <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />;
       case 'failed':
         return <XCircle className="w-4 h-4 text-red-600" />;
-      case 'refunded':
+      case 'cancelled':
         return <AlertCircle className="w-4 h-4 text-gray-600" />;
       default:
         return <Clock className="w-4 h-4 text-gray-400" />;
@@ -365,14 +435,15 @@ const BillingHistory: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch(status) {
-      case 'paid':
       case 'completed':
         return 'bg-green-50 text-green-600';
       case 'pending':
         return 'bg-yellow-50 text-yellow-600';
+      case 'processing':
+        return 'bg-blue-50 text-blue-600';
       case 'failed':
         return 'bg-red-50 text-red-600';
-      case 'refunded':
+      case 'cancelled':
         return 'bg-gray-50 text-gray-600';
       default:
         return 'bg-secondary-50 text-secondary-600';
@@ -381,15 +452,16 @@ const BillingHistory: React.FC = () => {
 
   const getStatusLabel = (status: string) => {
     switch(status) {
-      case 'paid':
       case 'completed':
-        return 'Paid';
+        return 'Completed';
       case 'pending':
         return 'Pending';
+      case 'processing':
+        return 'Processing';
       case 'failed':
         return 'Failed';
-      case 'refunded':
-        return 'Refunded';
+      case 'cancelled':
+        return 'Cancelled';
       default:
         return status.charAt(0).toUpperCase() + status.slice(1);
     }
@@ -429,7 +501,25 @@ const BillingHistory: React.FC = () => {
   };
 
   const paymentMethods = ['all', ...new Set(payments.map(p => p.payment_method).filter(Boolean))];
-  const statusOptions = ['all', 'pending', 'paid', 'completed', 'failed', 'refunded'];
+  const statusOptions = ['all', 'pending', 'processing', 'completed', 'failed', 'cancelled'];
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Lock className="w-12 h-12 text-secondary-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-secondary-900">Please Login</h3>
+          <p className="text-secondary-500">You need to be logged in to view payment history</p>
+          <button
+            onClick={() => navigate('/login')}
+            className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -442,7 +532,7 @@ const BillingHistory: React.FC = () => {
             <ArrowLeft className="w-5 h-5 text-secondary-600" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-secondary-900">Billing History</h1>
+            <h1 className="text-2xl font-bold text-secondary-900">My Payment History</h1>
             <p className="text-secondary-500">View and manage your payment history</p>
           </div>
         </div>
@@ -456,11 +546,11 @@ const BillingHistory: React.FC = () => {
             Refresh
           </button>
           <button 
-            onClick={() => toast.info('Print feature coming soon')}
+            onClick={() => toast.info('Export feature coming soon')}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm"
           >
-            <Printer className="w-4 h-4" />
-            Print
+            <Download className="w-4 h-4" />
+            Export
           </button>
           <button
             onClick={() => {
@@ -468,29 +558,12 @@ const BillingHistory: React.FC = () => {
               setIsAddModalOpen(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors text-sm"
-            disabled={subscriptions.length === 0}
           >
             <Plus className="w-4 h-4" />
             Add Payment
           </button>
         </div>
       </div>
-
-      {subscriptions.length === 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
-          <AlertCircle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-          <h3 className="text-sm font-medium text-yellow-800">No Subscriptions Found</h3>
-          <p className="text-xs text-yellow-600 mt-1">
-            You need to create a subscription first before adding payments.
-          </p>
-          <button
-            onClick={() => navigate('/subscriptions')}
-            className="mt-2 px-4 py-1.5 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 transition-colors"
-          >
-            Go to Subscriptions
-          </button>
-        </div>
-      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
@@ -500,12 +573,12 @@ const BillingHistory: React.FC = () => {
           </p>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Total Invoices</p>
+          <p className="text-xs text-secondary-400">Total Transactions</p>
           <p className="text-lg font-bold text-secondary-900">
             {isLoading ? '...' : stats.totalInvoices}
           </p>
           <div className="flex gap-2 text-xs mt-1">
-            <span className="text-green-600">{stats.paidCount} Paid</span>
+            <span className="text-green-600">{stats.paidCount} Completed</span>
             <span className="text-yellow-600">{stats.pendingCount} Pending</span>
             <span className="text-red-600">{stats.failedCount} Failed</span>
           </div>
@@ -519,7 +592,7 @@ const BillingHistory: React.FC = () => {
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
           <p className="text-xs text-secondary-400">Next Payment</p>
           <p className="text-lg font-bold text-secondary-900">
-            {formatCurrency(59000)}
+            as you paid
           </p>
           <p className="text-xs text-secondary-400 mt-1">Due on September 1, 2026</p>
         </div>
@@ -531,7 +604,7 @@ const BillingHistory: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
             <input
               type="text"
-              placeholder="Search by description, invoice, method..."
+              placeholder="Search by school, transaction code, reference..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
@@ -596,15 +669,9 @@ const BillingHistory: React.FC = () => {
                 setIsAddModalOpen(true);
               }}
               className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              disabled={subscriptions.length === 0}
             >
               Add Payment
             </button>
-            {subscriptions.length === 0 && (
-              <p className="text-xs text-secondary-400 mt-2">
-                You need to create a subscription first
-              </p>
-            )}
           </div>
         ) : (
           <>
@@ -612,12 +679,13 @@ const BillingHistory: React.FC = () => {
               <table className="w-full">
                 <thead className="bg-secondary-50">
                   <tr>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Invoice</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Date</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Description</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Transaction Code</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">School</th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Amount</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Plan</th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Method</th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Date</th>
                     <th className="text-right py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -626,17 +694,20 @@ const BillingHistory: React.FC = () => {
                     <tr key={payment.id} className="hover:bg-secondary-50 transition-colors">
                       <td className="py-3 px-4">
                         <span className="text-sm font-mono text-primary-600">
-                          {payment.invoice_number || 'N/A'}
+                          {payment.transaction_code || 'N/A'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-secondary-600">
-                        {formatDate(payment.created_at)}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-secondary-700">
-                        {payment.description || 'Payment'}
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="font-medium text-secondary-900 text-sm">{payment.school_name || 'N/A'}</p>
+                          <p className="text-xs text-secondary-400">{payment.school_code || 'N/A'}</p>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-sm font-medium text-secondary-900">
                         {formatCurrency(payment.amount)}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {payment.plan_name || 'N/A'}
                       </td>
                       <td className="py-3 px-4 text-sm text-secondary-600">
                         {payment.payment_method?.charAt(0).toUpperCase() + payment.payment_method?.slice(1) || 'N/A'}
@@ -647,8 +718,18 @@ const BillingHistory: React.FC = () => {
                           {getStatusLabel(payment.status)}
                         </span>
                       </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {formatDate(payment.created_at)}
+                      </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openViewModal(payment)}
+                            className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
+                          </button>
                           <button
                             onClick={() => openEditModal(payment)}
                             className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
@@ -662,13 +743,6 @@ const BillingHistory: React.FC = () => {
                             title="Delete Payment"
                           >
                             <Trash2 className="w-4 h-4 text-red-400 hover:text-red-600" />
-                          </button>
-                          <button
-                            onClick={() => toast.info('View invoice coming soon')}
-                            className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
-                            title="View Invoice"
-                          >
-                            <FileText className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
                           </button>
                         </div>
                       </td>
@@ -723,6 +797,251 @@ const BillingHistory: React.FC = () => {
         )}
       </div>
 
+      {/* View Modal */}
+      {isViewModalOpen && selectedPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-white border-b border-secondary-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-xl font-bold text-secondary-900 flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-primary-600" />
+                  Payment Details
+                </h2>
+                <p className="text-sm text-secondary-500">
+                  Transaction: {selectedPayment.transaction_code}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsViewModalOpen(false);
+                  setSelectedPayment(null);
+                }}
+                className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-secondary-400" />
+              </button>
+            </div>
+
+            <div className="px-6 py-6 space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedPayment.status)}`}>
+                    {getStatusIcon(selectedPayment.status)}
+                    {getStatusLabel(selectedPayment.status)}
+                  </span>
+                  {selectedPayment.stage_progress > 0 && (
+                    <span className="text-xs text-secondary-400">
+                      Progress: {selectedPayment.stage_progress}%
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-secondary-400">
+                  {formatDate(selectedPayment.created_at)}
+                </span>
+              </div>
+
+              {/* Transaction Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-secondary-50 rounded-lg">
+                  <p className="text-xs text-secondary-400 mb-1">Transaction Code</p>
+                  <p className="font-mono font-medium text-secondary-900">
+                    {selectedPayment.transaction_code}
+                  </p>
+                </div>
+                <div className="p-4 bg-secondary-50 rounded-lg">
+                  <p className="text-xs text-secondary-400 mb-1">Transaction Reference</p>
+                  <p className="font-medium text-secondary-900">
+                    {selectedPayment.transaction_reference || 'N/A'}
+                  </p>
+                </div>
+              </div>
+
+              {/* School Info */}
+              <div>
+                <h3 className="text-sm font-semibold text-secondary-900 mb-3 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary-600" />
+                  School Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">School Name</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.school_name}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">School Code</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.school_code}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Info */}
+              <div>
+                <h3 className="text-sm font-semibold text-secondary-900 mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4 text-primary-600" />
+                  Admin Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Admin Name</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.admin_name || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Admin Email</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.admin_email}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Admin Phone</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.admin_phone}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Info */}
+              <div>
+                <h3 className="text-sm font-semibold text-secondary-900 mb-3 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-primary-600" />
+                  Payment Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Amount</p>
+                    <p className="text-xl font-bold text-primary-600">
+                      {formatCurrency(selectedPayment.amount)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Plan</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.plan_name}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Payment Method</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.payment_method?.charAt(0).toUpperCase() + selectedPayment.payment_method?.slice(1) || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Telecom Provider</p>
+                    <p className="font-medium text-secondary-900">
+                      {selectedPayment.telecom_provider?.charAt(0).toUpperCase() + selectedPayment.telecom_provider?.slice(1) || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Info */}
+              {(selectedPayment.notes || selectedPayment.receipt_filename) && (
+                <div>
+                  <h3 className="text-sm font-semibold text-secondary-900 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-primary-600" />
+                    Additional Information
+                  </h3>
+                  <div className="space-y-3">
+                    {selectedPayment.notes && (
+                      <div className="p-4 bg-secondary-50 rounded-lg">
+                        <p className="text-xs text-secondary-400 mb-1">Notes</p>
+                        <p className="text-sm text-secondary-900">{selectedPayment.notes}</p>
+                      </div>
+                    )}
+                    {selectedPayment.receipt_filename && (
+                      <div className="p-4 bg-secondary-50 rounded-lg">
+                        <p className="text-xs text-secondary-400 mb-1">Receipt Attachment</p>
+                        <div className="flex items-center gap-2">
+                          <File className="w-4 h-4 text-primary-600" />
+                          <span className="text-sm text-secondary-900">{selectedPayment.receipt_filename}</span>
+                          {selectedPayment.receipt_attachment && (
+                            <a
+                              href={selectedPayment.receipt_attachment}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              View
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Timestamps */}
+              <div>
+                <h3 className="text-sm font-semibold text-secondary-900 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-primary-600" />
+                  Timeline
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Initiated At</p>
+                    <p className="font-medium text-secondary-900">
+                      {formatDate(selectedPayment.initiated_at)}
+                    </p>
+                  </div>
+                  {selectedPayment.completed_at && (
+                    <div className="p-4 bg-secondary-50 rounded-lg">
+                      <p className="text-xs text-secondary-400 mb-1">Completed At</p>
+                      <p className="font-medium text-secondary-900">
+                        {formatDate(selectedPayment.completed_at)}
+                      </p>
+                    </div>
+                  )}
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Created At</p>
+                    <p className="font-medium text-secondary-900">
+                      {formatDate(selectedPayment.created_at)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-secondary-50 rounded-lg">
+                    <p className="text-xs text-secondary-400 mb-1">Updated At</p>
+                    <p className="font-medium text-secondary-900">
+                      {formatDate(selectedPayment.updated_at)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
+                <button
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    setSelectedPayment(null);
+                  }}
+                  className="px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    openEditModal(selectedPayment);
+                  }}
+                  className="px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit Payment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Payment Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
@@ -747,34 +1066,73 @@ const BillingHistory: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddPayment} className="px-6 py-6 space-y-4">
-              {/* Subscription Selection */}
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Subscription <span className="text-red-500">*</span>
+                  School Code <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="subscription_id"
-                  value={formData.subscription_id}
-                  onChange={handleFormChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                    formErrors.subscription_id ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                  }`}
-                  disabled={isSaving || isLoadingSubscriptions}
-                >
-                  <option value="0">Select Subscription</option>
-                  {subscriptions.map((sub) => (
-                    <option key={sub.id} value={sub.id}>
-                      {sub.school_name} - {sub.plan_display_name} ({sub.status})
-                    </option>
-                  ))}
-                </select>
-                {formErrors.subscription_id && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.subscription_id}</p>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="text"
+                    name="school_code"
+                    value={formData.school_code}
+                    onChange={handleFormChange}
+                    placeholder="Enter school code"
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                      formErrors.school_code ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                    }`}
+                    disabled={isSaving}
+                  />
+                </div>
+                {formErrors.school_code && (
+                  <p className="text-xs text-red-500 mt-1">{formErrors.school_code}</p>
                 )}
-                {subscriptions.length === 0 && (
-                  <p className="text-xs text-yellow-600 mt-1">
-                    No subscriptions available. Please create a subscription first.
-                  </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 mb-1">
+                  Admin Email <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="email"
+                    name="admin_email"
+                    value={formData.admin_email}
+                    onChange={handleFormChange}
+                    placeholder="admin@school.com"
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                      formErrors.admin_email ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                    }`}
+                    disabled={isSaving}
+                    readOnly
+                  />
+                </div>
+                {formErrors.admin_email && (
+                  <p className="text-xs text-red-500 mt-1">{formErrors.admin_email}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 mb-1">
+                  Admin Phone <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <PhoneCall className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="tel"
+                    name="admin_phone"
+                    value={formData.admin_phone}
+                    onChange={handleFormChange}
+                    placeholder="+255 712 345 678"
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                      formErrors.admin_phone ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                    }`}
+                    disabled={isSaving}
+                  />
+                </div>
+                {formErrors.admin_phone && (
+                  <p className="text-xs text-red-500 mt-1">{formErrors.admin_phone}</p>
                 )}
               </div>
 
@@ -794,7 +1152,7 @@ const BillingHistory: React.FC = () => {
                       formErrors.amount ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
                     }`}
                     min="0"
-                    step="0.01"
+                    step="100"
                     disabled={isSaving}
                   />
                 </div>
@@ -805,19 +1163,25 @@ const BillingHistory: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Currency
+                  Plan Name <span className="text-red-500">*</span>
                 </label>
                 <select
-                  name="currency"
-                  value={formData.currency}
+                  name="plan_name"
+                  value={formData.plan_name}
                   onChange={handleFormChange}
-                  className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                    formErrors.plan_name ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                  }`}
                   disabled={isSaving}
                 >
-                  <option value="TZS">TZS</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
+                  <option value="starter">Basic</option>
+                  <option value="professional">Premium</option>
+                  <option value="enterprise">Enterprise</option>
+                  <option value="trial">Trial</option>
                 </select>
+                {formErrors.plan_name && (
+                  <p className="text-xs text-red-500 mt-1">{formErrors.plan_name}</p>
+                )}
               </div>
 
               <div>
@@ -833,11 +1197,12 @@ const BillingHistory: React.FC = () => {
                   }`}
                   disabled={isSaving}
                 >
-                  <option value="card">Credit/Debit Card</option>
-                  <option value="mobile">Mobile Money</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="stripe">Stripe</option>
+                  <option value="vodacom">Vodacom</option>
+                  <option value="tigo">Tigo</option>
+                  <option value="airtel">Airtel</option>
+                  <option value="halotel">Halotel</option>
+                  <option value="ttcl">TTCL</option>
+                  <option value="zantel">Zantel</option>
                 </select>
                 {formErrors.payment_method && (
                   <p className="text-xs text-red-500 mt-1">{formErrors.payment_method}</p>
@@ -846,60 +1211,74 @@ const BillingHistory: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Payment Provider <span className="text-red-500">*</span>
+                  Transaction Reference <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="payment_provider"
-                  value={formData.payment_provider}
-                  onChange={handleFormChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                    formErrors.payment_provider ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                  }`}
-                  disabled={isSaving}
-                >
-                  <option value="stripe">Stripe</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="flutterwave">Flutterwave</option>
-                  <option value="paystack">Paystack</option>
-                  <option value="mpesa">M-Pesa</option>
-                </select>
-                {formErrors.payment_provider && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.payment_provider}</p>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="text"
+                    name="transaction_reference"
+                    value={formData.transaction_reference}
+                    onChange={handleFormChange}
+                    placeholder="Enter transaction reference"
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                      formErrors.transaction_reference ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                    }`}
+                    disabled={isSaving}
+                  />
+                </div>
+                {formErrors.transaction_reference && (
+                  <p className="text-xs text-red-500 mt-1">{formErrors.transaction_reference}</p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleFormChange}
-                  className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  disabled={isSaving}
-                >
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
-                  <option value="completed">Completed</option>
-                  <option value="failed">Failed</option>
-                  <option value="refunded">Refunded</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Description
+                  Notes
                 </label>
                 <textarea
-                  name="description"
-                  value={formData.description}
+                  name="notes"
+                  value={formData.notes}
                   onChange={handleFormChange}
-                  placeholder="Enter payment description"
+                  placeholder="Additional notes..."
                   className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                   rows={2}
                   disabled={isSaving}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 mb-1">
+                  Receipt Attachment (Optional)
+                </label>
+                <div className="border-2 border-dashed border-secondary-300 rounded-lg p-4 text-center hover:border-primary-500 transition-colors relative">
+                  {attachmentFile ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <File className="w-6 h-6 text-primary-600" />
+                        <span className="text-sm text-secondary-700">{attachmentName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeFile}
+                        className="p-1 hover:bg-red-50 rounded-lg text-red-500 hover:text-red-700"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-secondary-400 mx-auto mb-2" />
+                      <p className="text-sm text-secondary-500">Click to upload receipt</p>
+                      <p className="text-xs text-secondary-400">Any file format (No size limit)</p>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
@@ -916,7 +1295,7 @@ const BillingHistory: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving || subscriptions.length === 0}
+                  disabled={isSaving}
                   className="px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   {isSaving ? (
@@ -947,7 +1326,9 @@ const BillingHistory: React.FC = () => {
                   <Edit className="w-5 h-5 text-primary-600" />
                   Edit Payment
                 </h2>
-                <p className="text-sm text-secondary-500">Update payment details</p>
+                <p className="text-sm text-secondary-500">
+                  {selectedPayment.transaction_code} - {selectedPayment.school_name}
+                </p>
               </div>
               <button
                 onClick={() => {
@@ -978,30 +1359,13 @@ const BillingHistory: React.FC = () => {
                       formErrors.amount ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
                     }`}
                     min="0"
-                    step="0.01"
+                    step="100"
                     disabled={isSaving}
                   />
                 </div>
                 {formErrors.amount && (
                   <p className="text-xs text-red-500 mt-1">{formErrors.amount}</p>
                 )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Currency
-                </label>
-                <select
-                  name="currency"
-                  value={formData.currency}
-                  onChange={handleFormChange}
-                  className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  disabled={isSaving}
-                >
-                  <option value="TZS">TZS</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                </select>
               </div>
 
               <div>
@@ -1017,11 +1381,12 @@ const BillingHistory: React.FC = () => {
                   }`}
                   disabled={isSaving}
                 >
-                  <option value="card">Credit/Debit Card</option>
-                  <option value="mobile">Mobile Money</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="stripe">Stripe</option>
+                  <option value="vodacom">Vodacom</option>
+                  <option value="tigo">Tigo</option>
+                  <option value="airtel">Airtel</option>
+                  <option value="halotel">Halotel</option>
+                  <option value="ttcl">TTCL</option>
+                  <option value="zantel">Zantel</option>
                 </select>
                 {formErrors.payment_method && (
                   <p className="text-xs text-red-500 mt-1">{formErrors.payment_method}</p>
@@ -1030,56 +1395,36 @@ const BillingHistory: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Payment Provider <span className="text-red-500">*</span>
+                  Transaction Reference <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="payment_provider"
-                  value={formData.payment_provider}
-                  onChange={handleFormChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                    formErrors.payment_provider ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                  }`}
-                  disabled={isSaving}
-                >
-                  <option value="stripe">Stripe</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="flutterwave">Flutterwave</option>
-                  <option value="paystack">Paystack</option>
-                  <option value="mpesa">M-Pesa</option>
-                </select>
-                {formErrors.payment_provider && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.payment_provider}</p>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="text"
+                    name="transaction_reference"
+                    value={formData.transaction_reference}
+                    onChange={handleFormChange}
+                    placeholder="Enter transaction reference"
+                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                      formErrors.transaction_reference ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
+                    }`}
+                    disabled={isSaving}
+                  />
+                </div>
+                {formErrors.transaction_reference && (
+                  <p className="text-xs text-red-500 mt-1">{formErrors.transaction_reference}</p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleFormChange}
-                  className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  disabled={isSaving}
-                >
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
-                  <option value="completed">Completed</option>
-                  <option value="failed">Failed</option>
-                  <option value="refunded">Refunded</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Description
+                  Notes
                 </label>
                 <textarea
-                  name="description"
-                  value={formData.description}
+                  name="notes"
+                  value={formData.notes}
                   onChange={handleFormChange}
-                  placeholder="Enter payment description"
+                  placeholder="Additional notes..."
                   className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                   rows={2}
                   disabled={isSaving}

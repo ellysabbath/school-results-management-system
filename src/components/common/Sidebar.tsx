@@ -86,6 +86,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       icon: PieChart,
       section: 'System Admin'
     },
+        { 
+      path: '/manage-users', 
+      label: 'users operations', 
+      icon: Users,
+      section: 'System Admin'
+    },
     { 
       path: '/system/settings', 
       label: 'System Settings', 
@@ -93,15 +99,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       section: 'System Admin'
     },
         { 
-      path: '/manage-payments', 
+      path: '/billing', 
       label: 'payments', 
       icon: DollarSign,
       section: 'System Admin'
     },
 
-            { 
+   { 
       path: '/manage-plans', 
-      label: 'plans', 
+      label: 'manage payments', 
       icon: Plane,
       section: 'System Admin'
     },
