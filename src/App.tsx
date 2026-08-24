@@ -65,6 +65,7 @@ import SubscriptionPlans from './components/billing/SubscriptionPlans';
 import PaymentMethod from './components/billing/PaymentMethod';
 import PaymentPage from './components/billing/PaymentPage';
 import UsersAdmin from './components/super-admin/UsersAdmin';
+import ContactManagement from './pages/ContactManagement';
 
 const App: React.FC = () => {
   // Mock user for sidebar display
@@ -342,6 +343,15 @@ const App: React.FC = () => {
           path="/terms" element={
           <Layout>
              <TermManager />
+            </Layout>
+          }
+        />
+
+
+        <Route
+          path="/manage/mails" element={
+          <Layout>
+             <ContactManagement />
             </Layout>
           }
         />

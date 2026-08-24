@@ -16,7 +16,7 @@ const Footer: React.FC = () => {
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           {/* Copyright */}
           <p className="text-sm text-gray-400">
-            © {currentYear} School Manager. All rights reserved.
+            © {currentYear} Results Management. All rights reserved.
           </p>
           
           {/* Contact Info */}
@@ -26,14 +26,14 @@ const Footer: React.FC = () => {
               className="flex items-center gap-2 hover:text-white transition"
             >
               <Mail className="w-4 h-4 text-blue-400" />
-              support@schoolmanager.com
+              mwananjelaelisha36@gmail.com
             </a>
             <a 
               href="tel:+12551234567" 
               className="flex items-center gap-2 hover:text-white transition"
             >
               <Phone className="w-4 h-4 text-blue-400" />
-              +1 (555) 123-4567
+              +255 (742) 578-691
             </a>
           </div>
         </div>

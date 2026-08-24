@@ -29,7 +29,8 @@ import {
   TrendingUp,
   BookCopy,
   Plane,
-  DollarSign
+  DollarSign,
+  Podcast
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 
@@ -74,6 +75,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       icon: Shield,
       section: 'System Admin'
     },
+    
     { 
       path: '/system/schools', 
       label: 'All Schools', 
@@ -96,6 +98,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       path: '/system/settings', 
       label: 'System Settings', 
       icon: Server,
+      section: 'System Admin'
+    },
+      { 
+      path: '/manage/mails', 
+      label: 'manage mails', 
+      icon: Podcast,
       section: 'System Admin'
     },
         { 
@@ -319,7 +327,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
               <p className="text-lg font-bold">Premium</p>
               <p className="text-xs opacity-75">30 days remaining</p>
               <Link
-                to="/subscription"
+                to="/payment"
                 className="mt-2 inline-block bg-white text-blue-700 text-xs px-3 py-1 rounded hover:bg-gray-100 transition"
               >
                 <CreditCard className="w-3 h-3 inline mr-1" />
