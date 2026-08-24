@@ -23,6 +23,8 @@ interface Student {
   student_class: string;
   school_code?: string;
   school?: number;
+  email?: string;
+  guardian_email?: string;
 }
 
 interface Subject {
@@ -199,6 +201,11 @@ const ResultEntry: React.FC = () => {
         
         if (schoolCode) {
           setSearchSchoolCode(schoolCode);
+          setCurrentSchoolInfo({
+            code: schoolData.school_code,
+            name: schoolData.name,
+            id: schoolData.id
+          });
           await fetchDataBySchoolCode(schoolCode);
           toast.success(`Loaded data from ${schoolData.name}`);
         } else {
@@ -239,6 +246,7 @@ const ResultEntry: React.FC = () => {
     try {
       console.log('[ResultEntry] Fetching data for school code:', cleanCode);
       
+      // Fetch students
       const studentsResponse = await studentService.getStudentsBySchoolCode(cleanCode);
       console.log('[ResultEntry] Students response:', studentsResponse);
       
@@ -260,6 +268,7 @@ const ResultEntry: React.FC = () => {
         studentData = studentsResponse.results;
       }
       
+      // Fetch subjects
       const subjectsResponse = await subjectService.getSubjects({
         school_code: cleanCode,
         page_size: 100
@@ -273,6 +282,7 @@ const ResultEntry: React.FC = () => {
         subjectData = subjectsResponse;
       }
       
+      // Fetch terms
       if (userSchoolId) {
         try {
           const termsResponse = await termService.getTermsBySchool(userSchoolId.toString());
@@ -347,12 +357,10 @@ const ResultEntry: React.FC = () => {
 
   useEffect(() => {
     if (terms.length > 0 && !selectedTerm) {
-      // Try to find current term first
       const currentTerm = terms.find(t => t.is_current);
       if (currentTerm) {
         setSelectedTerm(currentTerm.id);
       } else {
-        // Otherwise select the first term
         setSelectedTerm(terms[0].id);
       }
     }
@@ -552,7 +560,7 @@ const ResultEntry: React.FC = () => {
   };
 
   // ============================================
-  // SAVE FUNCTIONS
+  // SAVE FUNCTIONS - FIXED
   // ============================================
 
   const saveStudentResults = async (studentId: number) => {
@@ -584,17 +592,21 @@ const ResultEntry: React.FC = () => {
       
       for (const subject of subjectsToSave) {
         const data = {
+          school_id: currentSchoolInfo.id,
           student_id: studentId,
           subject_id: subject.subjectId,
           term_id: selectedTerm,
           marks_obtained: subject.marks,
-          total_marks: subject.totalMarks,
+          total_marks: subject.totalMarks || 100,
           exam_type: 'final',
           teacher_remarks: subject.remarks || '',
         };
         resultsToSave.push(data);
       }
       
+      console.log('[ResultEntry] Saving results data:', resultsToSave);
+      
+      // Use the correct endpoint - /api/results/bulk-create/
       const response = await resultService.bulkCreateResults(resultsToSave);
       console.log('[ResultEntry] Save response:', response);
       
@@ -614,6 +626,7 @@ const ResultEntry: React.FC = () => {
       toast.success(`Saved ${resultsToSave.length} results for ${studentResult.studentName}!`);
     } catch (error: any) {
       console.error('Save error:', error);
+      console.error('Error response:', error.response?.data);
       toast.error(error.response?.data?.message || 'Failed to save results');
     } finally {
       setSavingStudentId(null);
@@ -638,16 +651,16 @@ const ResultEntry: React.FC = () => {
       for (const result of studentResults) {
         for (const subject of result.subjects) {
           if (subject.marks > 0) {
-            const data = {
+            resultsToSave.push({
+              school_id: currentSchoolInfo.id,
               student_id: result.studentId,
               subject_id: subject.subjectId,
               term_id: selectedTerm,
               marks_obtained: subject.marks,
-              total_marks: subject.totalMarks,
+              total_marks: subject.totalMarks || 100,
               exam_type: 'final',
               teacher_remarks: subject.remarks || '',
-            };
-            resultsToSave.push(data);
+            });
           }
         }
       }
@@ -656,6 +669,8 @@ const ResultEntry: React.FC = () => {
         toast.error('No marks entered to save');
         return;
       }
+      
+      console.log('[ResultEntry] Saving all results:', resultsToSave);
       
       const response = await resultService.bulkCreateResults(resultsToSave);
       console.log('[ResultEntry] Save all response:', response);
@@ -671,6 +686,7 @@ const ResultEntry: React.FC = () => {
       toast.success(`Saved ${resultsToSave.length} results successfully!`);
     } catch (error: any) {
       console.error('Save error:', error);
+      console.error('Error response:', error.response?.data);
       toast.error(error.response?.data?.message || 'Failed to save results');
     } finally {
       setIsSaving(false);

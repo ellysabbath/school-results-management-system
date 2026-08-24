@@ -6,7 +6,9 @@ import {
   ChevronLeft, ChevronRight, School, Hash,
   FileText, Calendar, BookOpen, Users, 
   CheckCircle, XCircle, Clock, ArrowRight,
-  Plus, Edit, Trash2, BarChart, Award
+  Plus, Edit, Trash2, BarChart, Award,
+  Mail, Send, Check, FileDown, MailCheck,
+  ChevronDown, ChevronUp, FileSpreadsheet
 } from 'lucide-react';
 import { resultService, studentService, subjectService, schoolService, termService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
@@ -46,6 +48,7 @@ interface Student {
   full_name?: string;
   admission_number: string;
   student_class: string;
+  email?: string;
 }
 
 interface Subject {
@@ -61,11 +64,29 @@ interface Term {
   is_current: boolean;
 }
 
-interface ApiResponse {
-  status: string;
-  count?: number;
-  results?: Result[];
-  data?: Result[];
+interface StudentResultRow {
+  studentId: number;
+  studentName: string;
+  admissionNumber: string;
+  className: string;
+  email?: string;
+  subjectResults: {
+    subjectId: number;
+    subjectName: string;
+    marks: number;
+    totalMarks: number;
+    percentage: number;
+    grade: string;
+    gradePoint: number;
+    resultId?: number;
+    isPublished: boolean;
+    remarks: string;
+  }[];
+  totalMarks: number;
+  averagePercentage: number;
+  overallGrade: string;
+  totalPoints: number;
+  resultCount: number;
 }
 
 // ============================================
@@ -87,6 +108,16 @@ const getGradeColor = (grade: string): string => {
   return colors[grade] || colors['N/A'];
 };
 
+const getStatusBadge = (isPublished: boolean): string => {
+  return isPublished 
+    ? 'bg-green-100 text-green-700'
+    : 'bg-yellow-100 text-yellow-700';
+};
+
+const getStatusText = (isPublished: boolean): string => {
+  return isPublished ? 'Published' : 'Draft';
+};
+
 const getGradePoint = (grade: string): number => {
   const points: Record<string, number> = {
     'A': 5.0,
@@ -99,16 +130,6 @@ const getGradePoint = (grade: string): number => {
     'F': 0.0,
   };
   return points[grade] || 0;
-};
-
-const getStatusBadge = (isPublished: boolean): string => {
-  return isPublished 
-    ? 'bg-green-100 text-green-700'
-    : 'bg-yellow-100 text-yellow-700';
-};
-
-const getStatusText = (isPublished: boolean): string => {
-  return isPublished ? 'Published' : 'Draft';
 };
 
 // ============================================
@@ -129,19 +150,23 @@ const ResultManagement: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
+  const [studentResultRows, setStudentResultRows] = useState<StudentResultRow[]>([]);
+  const [filteredRows, setFilteredRows] = useState<StudentResultRow[]>([]);
   
   // UI States
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMySchool, setIsLoadingMySchool] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [bulkDownloadFormat, setBulkDownloadFormat] = useState<'pdf' | 'excel'>('pdf');
   
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('all');
   const [selectedTerm, setSelectedTerm] = useState<number | null>(null);
-  const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
-  const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
   const [selectedGrade, setSelectedGrade] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [classes, setClasses] = useState<string[]>([]);
@@ -164,18 +189,35 @@ const ResultManagement: React.FC = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
   
   // Expanded Row State
-  const [expandedResult, setExpandedResult] = useState<number | null>(null);
+  const [expandedStudent, setExpandedStudent] = useState<number | null>(null);
+  
+  // Checkbox States
+  const [selectedStudents, setSelectedStudents] = useState<Set<number>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  
+  // Email Modal States
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('Matokeo Yako');
+  const [emailMessage, setEmailMessage] = useState('Tafadhali angalia kiambatisho chako cha matokeo.');
+  const [emailSentCount, setEmailSentCount] = useState(0);
+  const [emailFailedCount, setEmailFailedCount] = useState(0);
+  const [emailErrors, setEmailErrors] = useState<string[]>([]);
+  const [emailSendingComplete, setEmailSendingComplete] = useState(false);
+  
+  // Bulk Download Modal States
+  const [isBulkDownloadModalOpen, setIsBulkDownloadModalOpen] = useState(false);
+  const [bulkDownloadOptions, setBulkDownloadOptions] = useState({
+    format: 'pdf' as 'pdf' | 'excel',
+    includeAllStudents: true,
+    selectedStudentIds: [] as number[],
+  });
 
   // ============================================
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
-
-  // Get unique grades for filter
-  const gradeOptions = ['all', ...new Set(results.map(r => r.grade).filter(Boolean))];
 
   // ============================================
   // FETCH MY SCHOOL BY ADMIN EMAIL
@@ -245,76 +287,41 @@ const ResultManagement: React.FC = () => {
     try {
       console.log('[ResultManagement] Fetching data for school code:', schoolCode);
       
-      // Fetch results
-      const resultsResponse = await resultService.getResults({
+      // Fetch students
+      const studentsResponse = await studentService.getStudentsBySchoolCode(schoolCode);
+      console.log('[ResultManagement] Students response:', studentsResponse);
+      
+      let studentData: Student[] = [];
+      if (studentsResponse.status === 'success' && studentsResponse.data) {
+        const groupedData = studentsResponse.data;
+        if (groupedData.length > 0) {
+          studentData = groupedData[0].students || [];
+        }
+      } else if (Array.isArray(studentsResponse)) {
+        studentData = studentsResponse;
+      } else if (studentsResponse.results) {
+        studentData = studentsResponse.results;
+      }
+      setStudents(studentData);
+      
+      // Extract unique classes
+      const classList = [...new Set(studentData.map(s => s.student_class).filter(Boolean))];
+      setClasses(classList);
+      
+      // Fetch subjects
+      const subjectsResponse = await subjectService.getSubjects({
         school_code: schoolCode,
         page_size: 100
       });
-      console.log('[ResultManagement] Results response:', resultsResponse);
+      console.log('[ResultManagement] Subjects response:', subjectsResponse);
       
-      let resultData: Result[] = [];
-      if (resultsResponse.results) {
-        resultData = resultsResponse.results;
-      } else if (Array.isArray(resultsResponse)) {
-        resultData = resultsResponse;
-      } else if (resultsResponse.data) {
-        resultData = resultsResponse.data;
+      let subjectData: Subject[] = [];
+      if (subjectsResponse.results) {
+        subjectData = subjectsResponse.results;
+      } else if (Array.isArray(subjectsResponse)) {
+        subjectData = subjectsResponse;
       }
-      
-      setResults(resultData);
-      setFilteredResults(resultData);
-      setTotalResults(resultData.length);
-      setTotalPages(Math.ceil(resultData.length / itemsPerPage));
-      
-      // Extract unique grades
-      const gradeList = [...new Set(resultData.map(r => r.grade).filter(Boolean))];
-      setGrades(gradeList);
-      
-      // Fetch students
-      try {
-        const studentsResponse = await studentService.getStudentsBySchoolCode(schoolCode);
-        console.log('[ResultManagement] Students response:', studentsResponse);
-        
-        let studentData: Student[] = [];
-        if (studentsResponse.status === 'success' && studentsResponse.data) {
-          const groupedData = studentsResponse.data;
-          if (groupedData.length > 0) {
-            studentData = groupedData[0].students || [];
-          }
-        } else if (Array.isArray(studentsResponse)) {
-          studentData = studentsResponse;
-        } else if (studentsResponse.results) {
-          studentData = studentsResponse.results;
-        }
-        
-        setStudents(studentData);
-        
-        // Extract unique classes
-        const classList = [...new Set(studentData.map(s => s.student_class).filter(Boolean))];
-        setClasses(classList);
-      } catch (err) {
-        console.log('Could not fetch students:', err);
-      }
-      
-      // Fetch subjects
-      try {
-        const subjectsResponse = await subjectService.getSubjects({
-          school_code: schoolCode,
-          page_size: 100
-        });
-        console.log('[ResultManagement] Subjects response:', subjectsResponse);
-        
-        let subjectData: Subject[] = [];
-        if (subjectsResponse.results) {
-          subjectData = subjectsResponse.results;
-        } else if (Array.isArray(subjectsResponse)) {
-          subjectData = subjectsResponse;
-        }
-        
-        setSubjects(subjectData);
-      } catch (err) {
-        console.log('Could not fetch subjects:', err);
-      }
+      setSubjects(subjectData);
       
       // Fetch terms
       if (userSchoolId) {
@@ -332,7 +339,49 @@ const ResultManagement: React.FC = () => {
         }
       }
       
-      toast.success(`Loaded ${resultData.length} results`);
+      // Fetch results
+      const resultsResponse = await resultService.getResults({
+        school_code: schoolCode,
+        page_size: 100
+      });
+      console.log('[ResultManagement] Results response:', resultsResponse);
+      
+      let resultData: Result[] = [];
+      if (resultsResponse.results) {
+        resultData = resultsResponse.results;
+      } else if (Array.isArray(resultsResponse)) {
+        resultData = resultsResponse;
+      } else if (resultsResponse.data) {
+        resultData = resultsResponse.data;
+      }
+      
+      // Add student and subject names
+      const resultsWithNames = resultData.map(r => {
+        const student = studentData.find(s => s.id === r.student);
+        const subject = subjectData.find(s => s.id === r.subject);
+        const term = terms.find(t => t.id === r.term);
+        return {
+          ...r,
+          student_name: student?.full_name || `${student?.first_name} ${student?.last_name}` || 'Unknown',
+          subject_name: subject?.name || 'Unknown',
+          term_name: term?.name || 'Unknown',
+        };
+      });
+      
+      setResults(resultsWithNames);
+      
+      // Build student result rows
+      const rows = buildStudentResultRows(resultsWithNames, studentData, subjectData);
+      setStudentResultRows(rows);
+      setFilteredRows(rows);
+      setTotalResults(rows.length);
+      setTotalPages(Math.ceil(rows.length / itemsPerPage));
+      
+      // Extract unique grades
+      const gradeList = [...new Set(resultsWithNames.map(r => r.grade).filter(Boolean))];
+      setGrades(gradeList);
+      
+      toast.success(`Loaded ${rows.length} students with results`);
       
     } catch (error: any) {
       console.error('[ResultManagement] Error fetching data:', error);
@@ -341,7 +390,80 @@ const ResultManagement: React.FC = () => {
       setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [userSchoolId]);
+  }, [userSchoolId, terms]);
+
+  // ============================================
+  // BUILD STUDENT RESULT ROWS
+  // ============================================
+
+  const buildStudentResultRows = (resultsData: Result[], studentsData: Student[], subjectsData: Subject[]): StudentResultRow[] => {
+    const studentMap = new Map<number, StudentResultRow>();
+    
+    // Initialize rows for all students
+    studentsData.forEach(student => {
+      studentMap.set(student.id, {
+        studentId: student.id,
+        studentName: student.full_name || `${student.first_name} ${student.last_name}`,
+        admissionNumber: student.admission_number,
+        className: student.student_class,
+        email: student.email,
+        subjectResults: [],
+        totalMarks: 0,
+        averagePercentage: 0,
+        overallGrade: 'N/A',
+        totalPoints: 0,
+        resultCount: 0,
+      });
+    });
+    
+    // Add results to students
+    resultsData.forEach(result => {
+      const row = studentMap.get(result.student);
+      if (row) {
+        const subject = subjectsData.find(s => s.id === result.subject);
+        if (subject) {
+          row.subjectResults.push({
+            subjectId: result.subject,
+            subjectName: subject.name,
+            marks: result.marks_obtained,
+            totalMarks: result.total_marks,
+            percentage: result.percentage,
+            grade: result.grade,
+            gradePoint: result.grade_point,
+            resultId: result.id,
+            isPublished: result.is_published,
+            remarks: result.teacher_remarks,
+          });
+          row.totalMarks += result.marks_obtained;
+          row.resultCount += 1;
+        }
+      }
+    });
+    
+    // Calculate averages and grades
+    studentMap.forEach(row => {
+      if (row.resultCount > 0) {
+        const totalPercentage = row.subjectResults.reduce((sum, s) => sum + s.percentage, 0);
+        row.averagePercentage = totalPercentage / row.resultCount;
+        row.totalPoints = row.subjectResults.reduce((sum, s) => sum + getGradePoint(s.grade), 0);
+        
+        // Calculate overall grade
+        const avg = row.averagePercentage;
+        let grade = '';
+        if (avg >= 90) grade = 'A';
+        else if (avg >= 80) grade = 'B+';
+        else if (avg >= 70) grade = 'B';
+        else if (avg >= 60) grade = 'C+';
+        else if (avg >= 50) grade = 'C';
+        else if (avg >= 40) grade = 'D';
+        else if (avg >= 30) grade = 'E';
+        else grade = 'F';
+        row.overallGrade = grade;
+      }
+    });
+    
+    return Array.from(studentMap.values());
+  };
 
   // ============================================
   // AUTO-LOAD ON PAGE LOAD
@@ -356,60 +478,351 @@ const ResultManagement: React.FC = () => {
   }, [isAuthenticated, userEmail, fetchMySchoolByAdminEmail]);
 
   // ============================================
+  // AUTO-SELECT FIRST TERM
+  // ============================================
+
+  useEffect(() => {
+    if (terms.length > 0 && !selectedTerm) {
+      const currentTerm = terms.find(t => t.is_current);
+      if (currentTerm) {
+        setSelectedTerm(currentTerm.id);
+      } else {
+        setSelectedTerm(terms[0].id);
+      }
+    }
+  }, [terms]);
+
+  // ============================================
   // FILTER RESULTS
   // ============================================
 
   useEffect(() => {
-    let filtered = [...results];
+    let filtered = [...studentResultRows];
     
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(r =>
-        r.student_name?.toLowerCase().includes(term) ||
-        r.subject_name?.toLowerCase().includes(term) ||
-        r.grade?.toLowerCase().includes(term) ||
-        r.teacher_remarks?.toLowerCase().includes(term)
+      filtered = filtered.filter(row =>
+        row.studentName?.toLowerCase().includes(term) ||
+        row.admissionNumber?.toLowerCase().includes(term) ||
+        row.className?.toLowerCase().includes(term)
       );
     }
     
     if (selectedClass !== 'all') {
-      // Need to filter by student class - we'll use the student data
-      const studentIdsInClass = students
-        .filter(s => s.student_class === selectedClass)
-        .map(s => s.id);
-      filtered = filtered.filter(r => studentIdsInClass.includes(r.student));
-    }
-    
-    if (selectedTerm) {
-      filtered = filtered.filter(r => r.term === selectedTerm);
-    }
-    
-    if (selectedSubject) {
-      filtered = filtered.filter(r => r.subject === selectedSubject);
-    }
-    
-    if (selectedStudent) {
-      filtered = filtered.filter(r => r.student === selectedStudent);
+      filtered = filtered.filter(row => row.className === selectedClass);
     }
     
     if (selectedGrade !== 'all') {
-      filtered = filtered.filter(r => r.grade === selectedGrade);
+      filtered = filtered.filter(row => row.overallGrade === selectedGrade);
     }
     
     if (selectedStatus !== 'all') {
       const isPublished = selectedStatus === 'published';
-      filtered = filtered.filter(r => r.is_published === isPublished);
+      filtered = filtered.filter(row => 
+        row.subjectResults.some(s => s.isPublished === isPublished)
+      );
     }
     
-    setFilteredResults(filtered);
+    setFilteredRows(filtered);
     setTotalResults(filtered.length);
     setTotalPages(Math.ceil(filtered.length / itemsPerPage));
     setCurrentPage(1);
+    // Reset selections when filters change
+    setSelectedStudents(new Set());
+    setSelectAll(false);
   }, [
-    searchTerm, selectedClass, selectedTerm, 
-    selectedSubject, selectedStudent, selectedGrade, 
-    selectedStatus, results, students
+    searchTerm, selectedClass, selectedGrade, selectedStatus, studentResultRows
   ]);
+
+  // ============================================
+  // CHECKBOX HANDLERS
+  // ============================================
+
+  const toggleStudentSelection = (studentId: number) => {
+    setSelectedStudents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(studentId)) {
+        newSet.delete(studentId);
+      } else {
+        newSet.add(studentId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectedStudents(new Set());
+    } else {
+      const currentPageIds = getPaginatedRows().map(r => r.studentId);
+      setSelectedStudents(new Set(currentPageIds));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  // ============================================
+  // BULK DOWNLOAD HANDLERS
+  // ============================================
+
+  const openBulkDownloadModal = () => {
+    if (filteredRows.length === 0) {
+      toast.error('No results to download');
+      return;
+    }
+    
+    // Check if there are students with results
+    const studentsWithResults = filteredRows.filter(r => r.resultCount > 0);
+    if (studentsWithResults.length === 0) {
+      toast.error('No students have results to download');
+      return;
+    }
+    
+    setBulkDownloadOptions({
+      format: 'pdf',
+      includeAllStudents: true,
+      selectedStudentIds: Array.from(selectedStudents),
+    });
+    setIsBulkDownloadModalOpen(true);
+  };
+
+  const handleBulkDownload = async () => {
+    if (!currentSchoolInfo) {
+      toast.error('School information not found');
+      return;
+    }
+
+    setIsBulkDownloading(true);
+    
+    try {
+      let studentIds: number[] = [];
+      
+      if (bulkDownloadOptions.includeAllStudents) {
+        // Get all students with results
+        studentIds = filteredRows
+          .filter(r => r.resultCount > 0)
+          .map(r => r.studentId);
+      } else {
+        // Get selected students
+        studentIds = bulkDownloadOptions.selectedStudentIds;
+      }
+      
+      if (studentIds.length === 0) {
+        toast.error('No students selected for download');
+        setIsBulkDownloading(false);
+        return;
+      }
+
+      console.log(`[ResultManagement] Bulk downloading ${studentIds.length} students in ${bulkDownloadOptions.format} format`);
+      
+      let blob: Blob;
+      let fileName: string;
+      const dateStr = new Date().toISOString().split('T')[0];
+      
+      if (bulkDownloadOptions.format === 'pdf') {
+        // Download as PDF
+        blob = await resultService.getBulkResultsPDF({
+          school_code: currentSchoolInfo.code,
+          term_id: selectedTerm || undefined,
+          student_ids: studentIds.join(',')
+        });
+        fileName = `bulk_results_${currentSchoolInfo.code}_${dateStr}.pdf`;
+      } else {
+        // Download as Excel
+        blob = await resultService.getBulkResultsExcel({
+          school_code: currentSchoolInfo.code,
+          term_id: selectedTerm || undefined,
+          student_ids: studentIds.join(',')
+        });
+        fileName = `bulk_results_${currentSchoolInfo.code}_${dateStr}.xlsx`;
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(`Successfully downloaded ${studentIds.length} student results!`);
+    } catch (error: any) {
+      console.error('[ResultManagement] Bulk download error:', error);
+      toast.error(error.response?.data?.message || 'Failed to download results');
+    } finally {
+      setIsBulkDownloading(false);
+      setIsBulkDownloadModalOpen(false);
+    }
+  };
+
+  // ============================================
+  // EMAIL MODAL HANDLERS
+  // ============================================
+
+  const openEmailModal = () => {
+    const selectedIds = Array.from(selectedStudents);
+    if (selectedIds.length === 0) {
+      toast.error('Please select at least one student');
+      return;
+    }
+
+    const selectedRows = filteredRows.filter(r => selectedIds.includes(r.studentId));
+    const studentsWithEmail = selectedRows.filter(r => r.email);
+    
+    if (studentsWithEmail.length === 0) {
+      toast.error('Selected students do not have email addresses');
+      return;
+    }
+
+    setEmailSubject('Matokeo Yako');
+    setEmailMessage('Tafadhali angalia kiambatisho chako cha matokeo.');
+    setEmailSentCount(0);
+    setEmailFailedCount(0);
+    setEmailErrors([]);
+    setEmailSendingComplete(false);
+    setIsEmailModalOpen(true);
+  };
+
+  const handleSendEmails = async () => {
+    if (!currentSchoolInfo) {
+      toast.error('School information not found');
+      return;
+    }
+
+    const selectedIds = Array.from(selectedStudents);
+    const selectedRows = filteredRows.filter(r => selectedIds.includes(r.studentId));
+    const studentIds = selectedRows.map(r => r.studentId);
+    
+    const studentsWithEmail = selectedRows.filter(r => r.email);
+    
+    if (studentsWithEmail.length === 0) {
+      toast.error('No students with email addresses selected');
+      return;
+    }
+
+    setIsSendingEmails(true);
+    let sent = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    try {
+      const payload = {
+        school_code: currentSchoolInfo.code,
+        term_id: selectedTerm || undefined,
+        student_ids: studentIds,
+        subject: emailSubject,
+        message: emailMessage,
+      };
+      
+      console.log('[ResultManagement] Sending bulk emails:', payload);
+      
+      const response = await resultService.sendBulkResultsEmail(payload);
+      console.log('[ResultManagement] Bulk email response:', response);
+      
+      if (response.status === 'success') {
+        sent = response.data?.sent_count || 0;
+        failed = response.data?.failed_count || 0;
+        if (response.data?.errors) {
+          errors.push(...response.data.errors);
+        }
+        
+        setEmailSentCount(sent);
+        setEmailFailedCount(failed);
+        setEmailErrors(errors);
+        setEmailSendingComplete(true);
+        
+        toast.success(`Successfully sent ${sent} emails${failed > 0 ? `, ${failed} failed` : ''}`);
+      } else {
+        toast.error(response.message || 'Failed to send emails');
+      }
+    } catch (error: any) {
+      console.error('[ResultManagement] Error sending emails:', error);
+      toast.error(error.response?.data?.message || 'Failed to send emails');
+    } finally {
+      setIsSendingEmails(false);
+    }
+  };
+
+  // ============================================
+  // SINGLE RESULT ACTIONS
+  // ============================================
+
+  const handleDownloadPDF = async (studentId: number) => {
+    setIsDownloading(true);
+    try {
+      const student = students.find(s => s.id === studentId);
+      if (!student) {
+        toast.error('Student not found');
+        return;
+      }
+      
+      const pdfBlob = await resultService.getStudentResultsPDF({
+        student_id: studentId,
+        term_id: selectedTerm || undefined
+      });
+      
+      const url = window.URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `results_${student.full_name}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF downloaded successfully!');
+    } catch (error: any) {
+      console.error('[ResultManagement] Error downloading PDF:', error);
+      toast.error(error.response?.data?.message || 'Failed to download PDF');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleSendSingleEmail = async (studentId: number) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) {
+      toast.error('Student not found');
+      return;
+    }
+
+    if (!student.email) {
+      toast.error('Student does not have an email address');
+      return;
+    }
+
+    // Get all results for this student
+    const studentResults = results.filter(r => r.student === studentId);
+    if (studentResults.length === 0) {
+      toast.error('No results found for this student');
+      return;
+    }
+
+    setIsSendingEmails(true);
+    try {
+      // Send first result as single email (or you can implement bulk for single student)
+      const payload = {
+        result_id: studentResults[0].id,
+        email: student.email,
+        subject: 'Matokeo Yako',
+        message: 'Tafadhali angalia kiambatisho chako cha matokeo.',
+      };
+      
+      const response = await resultService.sendSingleResultEmail(payload);
+      
+      if (response.status === 'success') {
+        toast.success(`Result sent to ${student.email} successfully!`);
+      } else {
+        toast.error(response.message || 'Failed to send email');
+      }
+    } catch (error: any) {
+      console.error('[ResultManagement] Error sending email:', error);
+      toast.error(error.response?.data?.message || 'Failed to send email');
+    } finally {
+      setIsSendingEmails(false);
+    }
+  };
 
   // ============================================
   // HANDLERS
@@ -435,11 +848,13 @@ const ResultManagement: React.FC = () => {
     setSearchTerm('');
     setSelectedClass('all');
     setSelectedTerm(null);
-    setSelectedSubject(null);
-    setSelectedStudent(null);
     setSelectedGrade('all');
     setSelectedStatus('all');
     setSearchError(null);
+    setSelectedStudents(new Set());
+    setSelectAll(false);
+    setStudentResultRows([]);
+    setFilteredRows([]);
   };
 
   const handleRefresh = () => {
@@ -449,11 +864,11 @@ const ResultManagement: React.FC = () => {
   };
 
   const handleCreateResults = () => {
-    navigate('/results');
+    navigate('/results/create');
   };
 
-  const toggleExpandResult = (resultId: number) => {
-    setExpandedResult(expandedResult === resultId ? null : resultId);
+  const toggleExpandStudent = (studentId: number) => {
+    setExpandedStudent(expandedStudent === studentId ? null : studentId);
   };
 
   const goToPage = (page: number) => {
@@ -463,22 +878,29 @@ const ResultManagement: React.FC = () => {
   };
 
   const handleExport = async () => {
+    if (filteredRows.length === 0) {
+      toast.error('No results to export');
+      return;
+    }
+
     setIsExporting(true);
     try {
-      // Create CSV data
-      const headers = ['Student', 'Subject', 'Term', 'Marks', 'Total', 'Percentage', 'Grade', 'Points', 'Status', 'Remarks'];
-      const rows = filteredResults.map(r => [
-        r.student_name || 'N/A',
-        r.subject_name || 'N/A',
-        r.term_name || 'N/A',
-        r.marks_obtained,
-        r.total_marks,
-        r.percentage?.toFixed(1) + '%' || 'N/A',
-        r.grade || 'N/A',
-        r.grade_point || 0,
-        r.is_published ? 'Published' : 'Draft',
-        r.teacher_remarks || ''
-      ]);
+      const headers = ['Student', 'Admission', 'Class', ...subjects.map(s => s.name), 'Average', 'Grade', 'Points'];
+      const rows = filteredRows.map(row => {
+        const subjectMarks = subjects.map(subject => {
+          const result = row.subjectResults.find(s => s.subjectId === subject.id);
+          return result ? `${result.marks}/${result.totalMarks} (${result.grade})` : '-';
+        });
+        return [
+          row.studentName,
+          row.admissionNumber,
+          row.className,
+          ...subjectMarks,
+          row.averagePercentage.toFixed(1) + '%',
+          row.overallGrade,
+          row.totalPoints.toFixed(1)
+        ];
+      });
       
       const csvContent = [
         headers.join(','),
@@ -517,25 +939,10 @@ const ResultManagement: React.FC = () => {
     });
   };
 
-  const getPaginatedResults = () => {
+  const getPaginatedRows = () => {
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
-    return filteredResults.slice(start, end);
-  };
-
-  const getStudentName = (studentId: number): string => {
-    const student = students.find(s => s.id === studentId);
-    return student?.full_name || `${student?.first_name} ${student?.last_name}` || 'Unknown';
-  };
-
-  const getSubjectName = (subjectId: number): string => {
-    const subject = subjects.find(s => s.id === subjectId);
-    return subject?.name || 'Unknown';
-  };
-
-  const getTermName = (termId: number): string => {
-    const term = terms.find(t => t.id === termId);
-    return term?.name || 'Unknown';
+    return filteredRows.slice(start, end);
   };
 
   const renderLoadingState = () => (
@@ -663,6 +1070,29 @@ const ResultManagement: React.FC = () => {
         <div className="flex items-center gap-3 flex-wrap">
           {currentSchoolInfo && (
             <>
+              {/* Bulk Actions */}
+              {selectedStudents.size > 0 && (
+                <button
+                  onClick={openEmailModal}
+                  disabled={isSendingEmails}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                >
+                  <Mail className="w-4 h-4" />
+                  Send to {selectedStudents.size} Selected
+                </button>
+              )}
+              <button 
+                onClick={openBulkDownloadModal}
+                disabled={isBulkDownloading || filteredRows.filter(r => r.resultCount > 0).length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm disabled:opacity-50"
+              >
+                {isBulkDownloading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                Bulk Download
+              </button>
               <button 
                 onClick={handleRefresh}
                 className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
@@ -673,7 +1103,7 @@ const ResultManagement: React.FC = () => {
               </button>
               <button 
                 onClick={handleExport}
-                disabled={isExporting || filteredResults.length === 0}
+                disabled={isExporting || filteredRows.length === 0}
                 className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600 disabled:opacity-50"
               >
                 {isExporting ? (
@@ -705,46 +1135,33 @@ const ResultManagement: React.FC = () => {
       {/* ==========================================
           STATS CARDS
           ========================================== */}
-      {totalResults > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {studentResultRows.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
-            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Results</p>
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Students</p>
             <p className="text-2xl font-bold text-secondary-900 mt-1">
-              {isLoading ? '...' : totalResults}
+              {isLoading ? '...' : studentResultRows.length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg border border-secondary-200 p-4">
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">With Results</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">
+              {isLoading ? '...' : studentResultRows.filter(r => r.resultCount > 0).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg border border-secondary-200 p-4">
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Avg. Performance</p>
+            <p className="text-2xl font-bold text-purple-600 mt-1">
+              {isLoading ? '...' : (() => {
+                const avg = studentResultRows.reduce((sum, r) => sum + r.averagePercentage, 0) / studentResultRows.length || 0;
+                return avg.toFixed(1) + '%';
+              })()}
             </p>
           </div>
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Published</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">
-              {isLoading ? '...' : results.filter(r => r.is_published).length}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg border border-secondary-200 p-4">
-            <p className="text-xs text-secondary-400 uppercase tracking-wider">Drafts</p>
-            <p className="text-2xl font-bold text-yellow-600 mt-1">
-              {isLoading ? '...' : results.filter(r => !r.is_published).length}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg border border-secondary-200 p-4">
-            <p className="text-xs text-secondary-400 uppercase tracking-wider">Avg. Marks</p>
-            <p className="text-2xl font-bold text-purple-600 mt-1">
-              {isLoading ? '...' : (results.reduce((sum, r) => sum + r.marks_obtained, 0) / results.length || 0).toFixed(1)}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg border border-secondary-200 p-4">
-            <p className="text-xs text-secondary-400 uppercase tracking-wider">Avg. Grade</p>
             <p className="text-2xl font-bold text-blue-600 mt-1">
-              {isLoading ? '...' : (() => {
-                const avg = results.reduce((sum, r) => sum + (r.percentage || 0), 0) / results.length || 0;
-                if (avg >= 90) return 'A';
-                if (avg >= 80) return 'B+';
-                if (avg >= 70) return 'B';
-                if (avg >= 60) return 'C+';
-                if (avg >= 50) return 'C';
-                if (avg >= 40) return 'D';
-                if (avg >= 30) return 'E';
-                return 'F';
-              })()}
+              {isLoading ? '...' : studentResultRows.filter(r => r.subjectResults.some(s => s.isPublished)).length}
             </p>
           </div>
         </div>
@@ -873,7 +1290,7 @@ const ResultManagement: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
               <input
                 type="text"
-                placeholder="Search by student, subject, grade, remarks..."
+                placeholder="Search by student name, admission..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -969,145 +1386,221 @@ const ResultManagement: React.FC = () => {
         )}
 
         {/* ==========================================
-            RESULTS TABLE
+            RESULTS TABLE - Single Row Per Student
             ========================================== */}
         <div className="overflow-x-auto">
           {isLoading ? (
             renderLoadingState()
-          ) : filteredResults.length === 0 ? (
+          ) : filteredRows.length === 0 ? (
             renderEmptyState()
           ) : (
             <table className="w-full">
               <thead className="bg-secondary-50">
                 <tr>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectAll}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                      title="Select all on this page"
+                    />
+                  </th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">#</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Student</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Subject</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Marks</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">%</th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Class</th>
+                  {subjects.map(subject => (
+                    <th key={subject.id} className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                      {subject.name}
+                    </th>
+                  ))}
+                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Avg</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Grade</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Points</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
                   <th className="text-right py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-secondary-100">
-                {getPaginatedResults().map((result, index) => {
-                  const isExpanded = expandedResult === result.id;
+                {getPaginatedRows().map((row, index) => {
                   const globalIndex = ((currentPage - 1) * itemsPerPage) + index + 1;
+                  const isSelected = selectedStudents.has(row.studentId);
+                  const isExpanded = expandedStudent === row.studentId;
+                  const hasEmail = !!row.email;
                   
                   return (
-                    <React.Fragment key={result.id}>
+                    <React.Fragment key={row.studentId}>
                       <tr className="hover:bg-secondary-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleStudentSelection(row.studentId)}
+                            className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                            disabled={row.resultCount === 0}
+                          />
+                        </td>
                         <td className="py-3 px-4 text-sm text-secondary-500">
                           {globalIndex}
                         </td>
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-secondary-100 rounded-full flex items-center justify-center text-secondary-600 font-medium text-xs">
-                              {result.student_name?.charAt(0) || 'S'}
+                              {row.studentName?.charAt(0) || 'S'}
                             </div>
-                            <span className="text-sm font-medium text-secondary-900">
-                              {result.student_name || 'Unknown'}
+                            <div>
+                              <p className="text-sm font-medium text-secondary-900">{row.studentName}</p>
+                              <p className="text-xs text-secondary-400">{row.admissionNumber}</p>
+                            </div>
+                            {hasEmail && (
+                              <span className="text-xs text-secondary-400" title={`Email: ${row.email}`}>
+                                <Mail className="w-3 h-3 inline" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-secondary-600">
+                          {row.className}
+                        </td>
+                        {subjects.map(subject => {
+                          const result = row.subjectResults.find(s => s.subjectId === subject.id);
+                          return (
+                            <td key={subject.id} className="py-3 px-4">
+                              {result ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-sm font-medium text-secondary-700">
+                                    {result.marks}/{result.totalMarks}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getGradeColor(result.grade)}`}>
+                                    {result.grade}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-secondary-400">-</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="py-3 px-4 text-sm font-medium text-secondary-900">
+                          {row.resultCount > 0 ? row.averagePercentage.toFixed(1) + '%' : '-'}
+                        </td>
+                        <td className="py-3 px-4">
+                          {row.resultCount > 0 && row.overallGrade !== 'N/A' ? (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getGradeColor(row.overallGrade)}`}>
+                              {row.overallGrade}
                             </span>
-                          </div>
+                          ) : (
+                            <span className="text-sm text-secondary-400">-</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-sm text-secondary-600">
-                          <div className="flex items-center gap-1">
-                            <BookOpen className="w-3.5 h-3.5 text-secondary-400" />
-                            <span>{result.subject_name || 'Unknown'}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-secondary-600">
-                          {result.marks_obtained} / {result.total_marks}
-                        </td>
-                        <td className="py-3 px-4 text-sm font-medium text-secondary-700">
-                          {result.percentage?.toFixed(1)}%
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getGradeColor(result.grade)}`}>
-                            {result.grade || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-secondary-600">
-                          {result.grade_point?.toFixed(1) || '0.0'}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(result.is_published)}`}>
-                            {getStatusText(result.is_published)}
-                          </span>
+                          {row.resultCount > 0 ? row.totalPoints.toFixed(1) : '-'}
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => toggleExpandResult(result.id)}
-                            className="px-3 py-1.5 bg-secondary-100 hover:bg-secondary-200 text-secondary-700 text-xs font-medium rounded-lg transition-colors"
-                          >
-                            {isExpanded ? 'Hide' : 'View Details'}
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleDownloadPDF(row.studentId)}
+                              disabled={isDownloading || row.resultCount === 0}
+                              className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                              title="Download PDF"
+                            >
+                              <FileDown className="w-4 h-4 text-blue-500 hover:text-blue-700" />
+                            </button>
+                            {hasEmail && row.resultCount > 0 && (
+                              <button
+                                onClick={() => handleSendSingleEmail(row.studentId)}
+                                disabled={isSendingEmails}
+                                className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                                title="Send to Email"
+                              >
+                                <MailCheck className="w-4 h-4 text-green-500 hover:text-green-700" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => toggleExpandStudent(row.studentId)}
+                              className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                              title={isExpanded ? 'Hide Details' : 'View Details'}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
+                              )}
+                            </button>
+                          </div>
                         </td>
                       </tr>
 
-                      {/* Expanded Row - Details */}
+                      {/* Expanded Row - Subject Details */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={9} className="py-4 px-4 bg-secondary-50">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Student</p>
-                                <p className="text-sm font-medium text-secondary-900">{result.student_name || 'N/A'}</p>
+                          <td colSpan={subjects.length + 8} className="py-4 px-4 bg-secondary-50">
+                            <div className="space-y-3">
+                              <h4 className="font-semibold text-secondary-900">
+                                Detailed Results for {row.studentName}
+                                {selectedTerm && ` - ${terms.find(t => t.id === selectedTerm)?.name || 'Term'}`}
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {row.subjectResults.map((subject) => (
+                                  <div key={subject.subjectId} className="bg-white rounded-lg p-3 border border-secondary-200">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-sm font-medium text-secondary-900">{subject.subjectName}</p>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getGradeColor(subject.grade)}`}>
+                                        {subject.grade}
+                                      </span>
+                                    </div>
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-sm text-secondary-600">
+                                        Marks: {subject.marks}/{subject.totalMarks}
+                                      </p>
+                                      <p className="text-sm text-secondary-600">
+                                        Percentage: {subject.percentage.toFixed(1)}%
+                                      </p>
+                                      <p className="text-sm text-secondary-600">
+                                        Points: {subject.gradePoint.toFixed(1)}
+                                      </p>
+                                      <p className="text-xs text-secondary-400">
+                                        Status: {subject.isPublished ? 'Published' : 'Draft'}
+                                      </p>
+                                      {subject.remarks && (
+                                        <p className="text-xs text-secondary-500 mt-1">
+                                          Remarks: {subject.remarks}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                                {row.subjectResults.length === 0 && (
+                                  <div className="col-span-3 text-center text-secondary-400 py-8">
+                                    No subject results available
+                                  </div>
+                                )}
                               </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Subject</p>
-                                <p className="text-sm font-medium text-secondary-900">{result.subject_name || 'N/A'}</p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Term</p>
-                                <p className="text-sm font-medium text-secondary-900">{result.term_name || 'N/A'}</p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Exam Type</p>
-                                <p className="text-sm font-medium text-secondary-900 capitalize">{result.exam_type || 'N/A'}</p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Marks</p>
-                                <p className="text-sm font-medium text-secondary-900">{result.marks_obtained} / {result.total_marks}</p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Percentage</p>
-                                <p className="text-sm font-medium text-secondary-900">{result.percentage?.toFixed(1)}%</p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Grade</p>
-                                <p className={`text-sm font-medium ${getGradeColor(result.grade)}`}>
-                                  {result.grade || 'N/A'} ({result.grade_point?.toFixed(1)} points)
-                                </p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200">
-                                <p className="text-xs text-secondary-400">Status</p>
-                                <p className="text-sm font-medium">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(result.is_published)}`}>
-                                    {getStatusText(result.is_published)}
-                                  </span>
-                                  {result.published_at && (
-                                    <span className="text-xs text-secondary-400 ml-2">
-                                      {formatDate(result.published_at)}
-                                    </span>
-                                  )}
-                                </p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200 col-span-1 md:col-span-2 lg:col-span-3">
-                                <p className="text-xs text-secondary-400">Remarks</p>
-                                <p className="text-sm text-secondary-700">
-                                  {result.teacher_remarks || 'No remarks'}
-                                </p>
-                              </div>
-                              <div className="bg-white rounded-lg p-3 border border-secondary-200 col-span-1 md:col-span-2 lg:col-span-3">
-                                <p className="text-xs text-secondary-400">Created / Updated</p>
-                                <p className="text-xs text-secondary-500">
-                                  Created: {formatDate(result.created_at)}
-                                  {result.updated_at && ` • Updated: ${formatDate(result.updated_at)}`}
-                                </p>
-                              </div>
+                              {row.subjectResults.length > 0 && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                                  <div className="bg-white rounded-lg p-3 text-center border border-secondary-200">
+                                    <p className="text-xs text-secondary-400">Subjects</p>
+                                    <p className="text-lg font-bold text-secondary-900">{row.subjectResults.length}</p>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 text-center border border-secondary-200">
+                                    <p className="text-xs text-secondary-400">Average</p>
+                                    <p className="text-lg font-bold text-secondary-900">
+                                      {row.averagePercentage.toFixed(1)}%
+                                    </p>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 text-center border border-secondary-200">
+                                    <p className="text-xs text-secondary-400">Overall Grade</p>
+                                    <p className={`text-lg font-bold ${getGradeColor(row.overallGrade)}`}>
+                                      {row.overallGrade}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 text-center border border-secondary-200">
+                                    <p className="text-xs text-secondary-400">Total Points</p>
+                                    <p className="text-lg font-bold text-secondary-900">
+                                      {row.totalPoints.toFixed(1)}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1123,12 +1616,19 @@ const ResultManagement: React.FC = () => {
         {/* ==========================================
             PAGINATION
             ========================================== */}
-        {!isLoading && filteredResults.length > 0 && (
+        {!isLoading && filteredRows.length > 0 && (
           <div className="p-4 border-t border-secondary-200 flex items-center justify-between flex-wrap gap-4">
-            <p className="text-sm text-secondary-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
-              {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} results
-            </p>
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-secondary-500">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
+                {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} students
+              </p>
+              {selectedStudents.size > 0 && (
+                <span className="text-sm text-primary-600 font-medium">
+                  {selectedStudents.size} selected
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => goToPage(currentPage - 1)}
@@ -1165,6 +1665,290 @@ const ResultManagement: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ==========================================
+          BULK DOWNLOAD MODAL
+          ========================================== */}
+      {isBulkDownloadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-slide-up">
+            <div className="border-b border-secondary-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-secondary-900 flex items-center gap-2">
+                  <FileDown className="w-5 h-5 text-purple-600" />
+                  Bulk Download Results
+                </h2>
+                <p className="text-sm text-secondary-500">
+                  Download results for multiple students
+                </p>
+              </div>
+              <button
+                onClick={() => setIsBulkDownloadModalOpen(false)}
+                className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-secondary-400" />
+              </button>
+            </div>
+
+            <div className="px-6 py-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 mb-2">
+                  Download Options
+                </label>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id="includeAll"
+                      checked={bulkDownloadOptions.includeAllStudents}
+                      onChange={() => setBulkDownloadOptions({
+                        ...bulkDownloadOptions,
+                        includeAllStudents: true,
+                      })}
+                      className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                    />
+                    <label htmlFor="includeAll" className="text-sm text-secondary-700">
+                      All {filteredRows.filter(r => r.resultCount > 0).length} students with results
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      id="includeSelected"
+                      checked={!bulkDownloadOptions.includeAllStudents}
+                      onChange={() => setBulkDownloadOptions({
+                        ...bulkDownloadOptions,
+                        includeAllStudents: false,
+                      })}
+                      className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                      disabled={selectedStudents.size === 0}
+                    />
+                    <label htmlFor="includeSelected" className="text-sm text-secondary-700">
+                      Selected students ({selectedStudents.size} selected)
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 mb-2">
+                  Format
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setBulkDownloadOptions({
+                      ...bulkDownloadOptions,
+                      format: 'pdf'
+                    })}
+                    className={`p-3 border-2 rounded-lg text-center transition-colors ${
+                      bulkDownloadOptions.format === 'pdf'
+                        ? 'border-purple-600 bg-purple-50'
+                        : 'border-secondary-200 hover:border-purple-300'
+                    }`}
+                  >
+                    <FileText className={`w-6 h-6 mx-auto mb-1 ${
+                      bulkDownloadOptions.format === 'pdf' ? 'text-purple-600' : 'text-secondary-400'
+                    }`} />
+                    <p className={`text-sm font-medium ${
+                      bulkDownloadOptions.format === 'pdf' ? 'text-purple-700' : 'text-secondary-600'
+                    }`}>
+                      PDF
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => setBulkDownloadOptions({
+                      ...bulkDownloadOptions,
+                      format: 'excel'
+                    })}
+                    className={`p-3 border-2 rounded-lg text-center transition-colors ${
+                      bulkDownloadOptions.format === 'excel'
+                        ? 'border-green-600 bg-green-50'
+                        : 'border-secondary-200 hover:border-green-300'
+                    }`}
+                  >
+                    <FileSpreadsheet className={`w-6 h-6 mx-auto mb-1 ${
+                      bulkDownloadOptions.format === 'excel' ? 'text-green-600' : 'text-secondary-400'
+                    }`} />
+                    <p className={`text-sm font-medium ${
+                      bulkDownloadOptions.format === 'excel' ? 'text-green-700' : 'text-secondary-600'
+                    }`}>
+                      Excel
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {selectedTerm && (
+                <div className="bg-secondary-50 rounded-lg p-3">
+                  <p className="text-sm text-secondary-600">
+                    <span className="font-medium">Term:</span>{' '}
+                    {terms.find(t => t.id === selectedTerm)?.name || 'Selected Term'}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkDownloadModalOpen(false)}
+                  className="px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDownload}
+                  disabled={isBulkDownloading}
+                  className="px-6 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isBulkDownloading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-4 h-4" />
+                      Download
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          EMAIL MODAL
+          ========================================== */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-white border-b border-secondary-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-xl font-bold text-secondary-900 flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-primary-600" />
+                  Send Results via Email
+                </h2>
+                <p className="text-sm text-secondary-500">
+                  Sending to {selectedStudents.size} selected students
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEmailModalOpen(false);
+                  setEmailSendingComplete(false);
+                }}
+                className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-secondary-400" />
+              </button>
+            </div>
+
+            <div className="px-6 py-6 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-secondary-700 mb-1">
+                    Subject
+                  </label>
+                  <input
+                    type="text"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="Enter email subject"
+                    disabled={isSendingEmails || emailSendingComplete}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-secondary-700 mb-1">
+                    Message
+                  </label>
+                  <textarea
+                    value={emailMessage}
+                    onChange={(e) => setEmailMessage(e.target.value)}
+                    className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                    rows={3}
+                    placeholder="Enter email message"
+                    disabled={isSendingEmails || emailSendingComplete}
+                  />
+                </div>
+              </div>
+
+              {isSendingEmails && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-700">Sending emails...</p>
+                      <p className="text-xs text-blue-600">
+                        Sent: {emailSentCount} | Failed: {emailFailedCount}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {emailSendingComplete && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-green-700">Emails sent successfully!</p>
+                      <p className="text-xs text-green-600">
+                        Sent: {emailSentCount} | Failed: {emailFailedCount}
+                      </p>
+                      {emailErrors.length > 0 && (
+                        <div className="mt-2">
+                          {emailErrors.map((err, idx) => (
+                            <p key={idx} className="text-xs text-red-600">{err}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEmailModalOpen(false);
+                    setEmailSendingComplete(false);
+                  }}
+                  className="px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
+                  disabled={isSendingEmails}
+                >
+                  {emailSendingComplete ? 'Close' : 'Cancel'}
+                </button>
+                {!emailSendingComplete && (
+                  <button
+                    type="button"
+                    onClick={handleSendEmails}
+                    disabled={isSendingEmails}
+                    className="px-6 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isSendingEmails ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Send Emails
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

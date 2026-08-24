@@ -1237,87 +1237,174 @@ export const paymentService = {
 };
 
 // ============================================
-// RESULT SERVICES
+// RESULT SERVICES - Updated with /api/report/ base path
 // ============================================
 
 export const resultService = {
   /**
    * Get all results with optional filters
+   * GET /api/report/
    */
   getResults: async (params?: any) => {
-    const response = await schoolApi.get('/results/', { params });
+    const response = await schoolApi.get('/report/', { params });
     return response.data;
   },
 
   /**
    * Get a single result by ID
+   * GET /api/report/{result_id}/
    */
   getResult: async (id: number) => {
-    const response = await schoolApi.get(`/results/${id}/`);
+    const response = await schoolApi.get(`/report/${id}/`);
     return response.data;
   },
 
   /**
    * Create a new result
+   * POST /api/report/create/
    */
   createResult: async (data: any) => {
-    const response = await schoolApi.post('/results/', data);
+    const response = await schoolApi.post('/report/create/', data);
     return response.data;
   },
 
   /**
    * Update an existing result
+   * PUT /api/report/{result_id}/update/
    */
   updateResult: async (id: number, data: any) => {
-    const response = await schoolApi.put(`/results/${id}/`, data);
+    const response = await schoolApi.put(`/report/${id}/update/`, data);
     return response.data;
   },
 
   /**
    * Delete a result
+   * DELETE /api/report/{result_id}/delete/
    */
   deleteResult: async (id: number) => {
-    const response = await schoolApi.delete(`/results/${id}/`);
+    const response = await schoolApi.delete(`/report/${id}/delete/`);
     return response.data;
   },
 
   /**
-   * Get results by student
+   * Publish results
+   * POST /api/report/publish/
    */
-  getResultsByStudent: async (studentId: number, termId?: number, schoolCode?: string) => {
-    const params: any = { student: studentId };
-    if (termId) params.term = termId;
-    if (schoolCode) params.school_code = schoolCode;
-    const response = await schoolApi.get('/results/', { params });
+  publishResults: async (data: { result_ids: number[]; publish: boolean }) => {
+    const response = await schoolApi.post('/report/publish/', data);
     return response.data;
   },
 
   /**
-   * Get results by subject
+   * Get single result PDF
+   * GET /api/report/pdf/single/{result_id}/
    */
-  getResultsBySubject: async (subjectId: number, termId?: number, schoolCode?: string) => {
-    const params: any = { subject: subjectId };
-    if (termId) params.term = termId;
-    if (schoolCode) params.school_code = schoolCode;
-    const response = await schoolApi.get('/results/', { params });
-    return response.data;
-  },
-
-  /**
-   * Get results by school
-   */
-  getResultsBySchool: async (schoolId: string, params?: any) => {
-    const response = await schoolApi.get('/results/', {
-      params: { ...params, school: schoolId }
+  getSingleResultPDF: async (resultId: number) => {
+    const response = await schoolApi.get(`/report/pdf/single/${resultId}/`, {
+      responseType: 'blob'
     });
     return response.data;
   },
 
   /**
-   * Get results by school code
+   * Get student results PDF
+   * GET /api/report/pdf/student/?student_id={student_id}&term_id={term_id}
    */
-  getResultsBySchoolCode: async (schoolCode: string, params?: any) => {
-    const response = await schoolApi.get('/results/', {
+  getStudentResultsPDF: async (params: { student_id: number; term_id?: number }) => {
+    const response = await schoolApi.get('/report/pdf/student/', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  /**
+   * Get bulk results PDF
+   * GET /api/report/pdf/bulk/?school_code={school_code}&term_id={term_id}&student_ids={ids}
+   */
+  getBulkResultsPDF: async (params: { school_code: string; term_id?: number; student_ids?: string }) => {
+    const response = await schoolApi.get('/report/pdf/bulk/', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  /**
+   * Get bulk results Excel
+   * GET /api/report/excel/bulk/?school_code={school_code}&term_id={term_id}&student_ids={ids}
+   */
+  getBulkResultsExcel: async (params: { school_code: string; term_id?: number; student_ids?: string }) => {
+    const response = await schoolApi.get('/report/excel/bulk/', {
+      params,
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  /**
+   * Send single result email
+   * POST /api/report/email/single/
+   */
+  sendSingleResultEmail: async (data: { result_id: number; email?: string; subject?: string; message?: string }) => {
+    const response = await schoolApi.post('/report/email/single/', data);
+    return response.data;
+  },
+
+  /**
+   * Send bulk results email
+   * POST /api/report/email/bulk/
+   */
+  sendBulkResultsEmail: async (data: { 
+    school_code: string; 
+    term_id?: number; 
+    student_ids?: number[]; 
+    subject?: string; 
+    message?: string 
+  }) => {
+    const response = await schoolApi.post('/report/email/bulk/', data);
+    return response.data;
+  },
+
+  /**
+   * Get student result summary
+   * GET /api/report/summary/?student_id={student_id}&term_id={term_id}
+   */
+  getStudentResultSummary: async (params: { student_id: number; term_id?: number }) => {
+    const response = await schoolApi.get('/report/summary/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get results by student
+   * GET /api/report/?student={student_id}
+   */
+  getResultsByStudent: async (studentId: number, termId?: number, schoolCode?: string) => {
+    const params: any = { student: studentId };
+    if (termId) params.term = termId;
+    if (schoolCode) params.school_code = schoolCode;
+    const response = await schoolApi.get('/report/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get results by subject
+   * GET /api/report/?subject={subject_id}
+   */
+  getResultsBySubject: async (subjectId: number, termId?: number, schoolCode?: string) => {
+    const params: any = { subject: subjectId };
+    if (termId) params.term = termId;
+    if (schoolCode) params.school_code = schoolCode;
+    const response = await schoolApi.get('/report/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get results by school
+   * GET /api/report/?school_code={school_code}
+   */
+  getResultsBySchool: async (schoolCode: string, params?: any) => {
+    const response = await schoolApi.get('/report/', {
       params: { ...params, school_code: schoolCode }
     });
     return response.data;
@@ -1325,27 +1412,30 @@ export const resultService = {
 
   /**
    * Get results grouped by school
+   * GET /api/report/by-school/?school_code={school_code}
    */
   getResultsBySchoolGrouped: async (schoolCode: string, termId?: number) => {
     const params: any = { school_code: schoolCode };
     if (termId) params.term = termId;
-    const response = await schoolApi.get('/results/by-school/', { params });
+    const response = await schoolApi.get('/report/by-school/', { params });
     return response.data;
   },
 
   /**
    * Get result statistics
+   * GET /api/report/stats/?school_code={school_code}
    */
   getResultStats: async (params?: any) => {
-    const response = await schoolApi.get('/results/stats/', { params });
+    const response = await schoolApi.get('/report/stats/', { params });
     return response.data;
   },
 
   /**
    * Search results
+   * GET /api/report/search/?q={query}
    */
   searchResults: async (query: string, params?: any) => {
-    const response = await schoolApi.get('/results/search/', {
+    const response = await schoolApi.get('/report/search/', {
       params: { ...params, q: query }
     });
     return response.data;
@@ -1353,33 +1443,28 @@ export const resultService = {
 
   /**
    * Bulk create results
+   * POST /api/report/bulk-create/
    */
   bulkCreateResults: async (data: any[]) => {
-    const response = await schoolApi.post('/results/bulk-create/', data);
-    return response.data;
-  },
-
-  /**
-   * Publish results
-   */
-  publishResults: async (data: { student_id?: number; term_id: number; school_code?: string }) => {
-    const response = await schoolApi.post('/results/publish/', data);
+    const response = await schoolApi.post('/report/bulk-create/', data);
     return response.data;
   },
 
   /**
    * Get student statistics
+   * GET /api/report/student/{student_id}/statistics/
    */
   getStudentStatistics: async (studentId: number) => {
-    const response = await schoolApi.get(`/results/student/${studentId}/statistics/`);
+    const response = await schoolApi.get(`/report/student/${studentId}/statistics/`);
     return response.data;
   },
 
   /**
    * Get result summaries
+   * GET /api/report/summaries/
    */
   getResultSummaries: async (params?: any) => {
-    const response = await schoolApi.get('/results/summaries/', { params });
+    const response = await schoolApi.get('/report/summaries/', { params });
     return response.data;
   },
 };
