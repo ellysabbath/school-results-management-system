@@ -8,7 +8,7 @@ import {
   Upload, School, Hash, Send, CheckCircle, UserCircle, 
   Briefcase, PhoneCall, MessageCircle, Smartphone as SmartphoneIcon,
   CreditCard as CreditCardIcon, Building, Globe, Home,
-  File, Image, Paperclip, Download, Printer
+  File,
 } from 'lucide-react';
 import { paymentService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
@@ -25,6 +25,8 @@ interface PaymentFormData {
   transactionReference: string;
   attachment: File | null;
   attachmentName: string;
+  attachmentBase64: string;
+  notes: string;
 }
 
 interface TransactionStage {
@@ -78,6 +80,8 @@ const PaymentPage: React.FC = () => {
     transactionReference: '',
     attachment: null,
     attachmentName: '',
+    attachmentBase64: '',
+    notes: '',
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -89,6 +93,8 @@ const PaymentPage: React.FC = () => {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [transactionId, setTransactionId] = useState<number | null>(null);
   const [savedTransaction, setSavedTransaction] = useState<TeslaTransaction | null>(null);
+  const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
+  const [whatsappNumber] = useState('+255742578691');
 
   // Telecom companies with React Icons
   const telecomCompanies = [
@@ -221,27 +227,35 @@ const PaymentPage: React.FC = () => {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('File size must be less than 5MB');
-        return;
+      try {
+        // Convert to base64
+        const base64 = await fileToBase64(file);
+        
+        setFormData(prev => ({
+          ...prev,
+          attachment: file,
+          attachmentName: file.name,
+          attachmentBase64: base64,
+        }));
+        
+        toast.success(`File "${file.name}" uploaded successfully`);
+      } catch (error) {
+        console.error('Failed to convert file to base64:', error);
+        toast.error('Failed to process file');
       }
-      
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-      if (!allowedTypes.includes(file.type)) {
-        toast.error('Please upload a JPEG, PNG, or PDF file');
-        return;
-      }
-      
-      setFormData(prev => ({
-        ...prev,
-        attachment: file,
-        attachmentName: file.name,
-      }));
-      
-      toast.success(`File "${file.name}" uploaded successfully`);
     }
   };
 
@@ -250,6 +264,7 @@ const PaymentPage: React.FC = () => {
       ...prev,
       attachment: null,
       attachmentName: '',
+      attachmentBase64: '',
     }));
   };
 
@@ -293,31 +308,34 @@ const PaymentPage: React.FC = () => {
   // Save transaction to backend
   const saveTransaction = async () => {
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('school_code', formData.schoolCode);
-      formDataToSend.append('admin_email', formData.email);
-      formDataToSend.append('admin_name', formData.schoolName);
-      formDataToSend.append('admin_phone', formData.phone);
-      formDataToSend.append('amount', formData.amount.toString());
-      formDataToSend.append('payment_method', formData.telecomCompany);
-      formDataToSend.append('telecom_provider', formData.telecomCompany);
-      formDataToSend.append('transaction_reference', formData.transactionReference);
-      
+      const payload: any = {
+        school_code: formData.schoolCode,
+        admin_email: formData.email,
+        admin_name: formData.schoolName,
+        admin_phone: formData.phone,
+        amount: formData.amount,
+        payment_method: formData.telecomCompany,
+        telecom_provider: formData.telecomCompany,
+        transaction_reference: formData.transactionReference,
+        notes: formData.notes || '',
+      };
+
       if (formData.planId) {
-        formDataToSend.append('plan_id', formData.planId.toString());
+        payload.plan_id = formData.planId;
       }
       if (formData.planName) {
-        formDataToSend.append('plan_name', formData.planName);
-      }
-      if (formData.attachment) {
-        formDataToSend.append('receipt_attachment', formData.attachment);
-        formDataToSend.append('receipt_filename', formData.attachmentName);
-      }
-      if (formData.notes) {
-        formDataToSend.append('notes', formData.notes);
+        payload.plan_name = formData.planName;
       }
 
-      const response = await paymentService.createTransaction(formDataToSend);
+      // Send file as base64 if available
+      if (formData.attachmentBase64) {
+        payload.receipt_attachment_base64 = formData.attachmentBase64;
+        payload.receipt_filename = formData.attachmentName;
+      }
+
+      console.log('[PaymentPage] Sending payload:', payload);
+
+      const response = await paymentService.createTransaction(payload);
       console.log('[PaymentPage] Transaction saved:', response);
       
       setTransactionId(response.data.id);
@@ -326,22 +344,48 @@ const PaymentPage: React.FC = () => {
       return response.data;
     } catch (error: any) {
       console.error('[PaymentPage] Failed to save transaction:', error);
-      toast.error(error.response?.data?.message || 'Failed to save transaction');
+      
+      // If 404, show the URL issue
+      if (error.response?.status === 404) {
+        toast.error('Payment endpoint not found. Please check the URL configuration.');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to save transaction');
+      }
       throw error;
     }
   };
 
-  // Update transaction stage
-  const updateTransactionStage = async (action: string, data?: any) => {
-    if (!transactionId) return;
+  // Send data via WhatsApp
+  const sendWhatsAppMessage = () => {
+    const message = `
+📋 *PAYMENT CONFIRMATION*
+
+*Transaction Details:*
+🏫 School: ${formData.schoolName}
+📝 School Code: ${formData.schoolCode}
+📧 Email: ${formData.email}
+📱 Phone: ${formData.phone}
+💰 Amount: ${formatCurrency(formData.amount)}
+📋 Plan: ${formData.planName || 'N/A'}
+📡 Telecom: ${formData.telecomCompany}
+🔢 Reference: ${formData.transactionReference}
+📎 Attachment: ${formData.attachmentName || 'None'}
+
+*Transaction Code:* ${savedTransaction?.transaction_code || paymentReference}
+*Status:* ✅ Completed
+*Date:* ${new Date().toLocaleString()}
+
+Thank you for your payment!
+    `.trim();
+
+    // Encode message for WhatsApp
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${whatsappNumber.replace('+', '')}?text=${encodedMessage}`;
     
-    try {
-      const response = await paymentService.processTransaction(transactionId, action, data);
-      console.log('[PaymentPage] Stage updated:', response);
-      return response;
-    } catch (error: any) {
-      console.error('[PaymentPage] Failed to update stage:', error);
-    }
+    // Open WhatsApp in new window
+    window.open(whatsappUrl, '_blank');
+    
+    toast.success('Opening WhatsApp to send confirmation...');
   };
 
   const startTransaction = async () => {
@@ -377,14 +421,8 @@ const PaymentPage: React.FC = () => {
           );
           setCurrentStage(stageIndex);
           
-          // Update backend stage
-          const stageNames = ['ussd_dialed', 'processing', 'confirming', 'completed'];
-          if (stageIndex < stageNames.length) {
-            await updateTransactionStage(stageNames[stageIndex]);
-          }
-          
           // After 2 seconds, mark as completed
-          setTimeout(async () => {
+          setTimeout(() => {
             setTransactionStages(prev => 
               prev.map((s, idx) => ({
                 ...s,
@@ -399,8 +437,8 @@ const PaymentPage: React.FC = () => {
               setTransactionComplete(true);
               setIsProcessing(false);
               
-              // Complete transaction in backend
-              await updateTransactionStage('complete');
+              // Show final confirmation modal
+              setShowFinalConfirmation(true);
               
               toast.success('Payment completed successfully!');
             }
@@ -412,11 +450,7 @@ const PaymentPage: React.FC = () => {
       console.error('[PaymentPage] Transaction failed:', error);
       toast.error(error.message || 'Transaction failed');
       setIsProcessing(false);
-      
-      // Mark as failed in backend
-      if (transactionId) {
-        await updateTransactionStage('fail', { reason: error.message });
-      }
+      setShowConfirmation(false);
     }
   };
 
@@ -658,7 +692,7 @@ const PaymentPage: React.FC = () => {
                 {/* File Attachment */}
                 <div>
                   <label className="block text-sm font-medium text-secondary-700 mb-1">
-                    Payment Receipt / Attachment
+                    Payment Receipt / Attachment (Optional)
                   </label>
                   <div className="border-2 border-dashed border-secondary-300 rounded-lg p-6 text-center hover:border-primary-500 transition-colors relative">
                     {formData.attachment ? (
@@ -687,7 +721,7 @@ const PaymentPage: React.FC = () => {
                           Click to upload or drag and drop
                         </p>
                         <p className="text-xs text-secondary-400 mt-1">
-                          JPEG, PNG, PDF (Max 5MB)
+                          Any file format supported (No size limit)
                         </p>
                       </>
                     )}
@@ -696,9 +730,23 @@ const PaymentPage: React.FC = () => {
                       name="attachment"
                       onChange={handleFileUpload}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      accept=".jpg,.jpeg,.png,.pdf"
                     />
                   </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-secondary-700 mb-1">
+                    Additional Notes
+                  </label>
+                  <textarea
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    placeholder="Any additional information..."
+                    className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                    rows={3}
+                  />
                 </div>
 
                 {/* Security Notice */}
@@ -821,7 +869,7 @@ const PaymentPage: React.FC = () => {
                   ))}
                 </div>
 
-                {transactionComplete && (
+                {transactionComplete && !showFinalConfirmation && (
                   <div className="text-center p-6 bg-green-50 rounded-lg border border-green-200">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                       <CheckCircle2 className="w-8 h-8 text-green-600" />
@@ -830,25 +878,12 @@ const PaymentPage: React.FC = () => {
                     <p className="text-sm text-green-600 mt-1">
                       Your payment has been processed successfully.
                     </p>
-                    {savedTransaction?.transaction_code && (
-                      <p className="text-xs text-green-500 mt-1 font-mono">
-                        Transaction Code: {savedTransaction.transaction_code}
-                      </p>
-                    )}
-                    <div className="mt-4 space-x-3">
-                      <button
-                        onClick={() => navigate('/billing')}
-                        className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                      >
-                        View Billing
-                      </button>
-                      <button
-                        onClick={() => navigate('/dashboard')}
-                        className="px-6 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors"
-                      >
-                        Dashboard
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => setShowFinalConfirmation(true)}
+                      className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      Continue
+                    </button>
                   </div>
                 )}
               </div>
@@ -929,6 +964,73 @@ const PaymentPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Final Confirmation Modal */}
+      {showFinalConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-slide-up">
+            <div className="p-6 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              </div>
+              
+              <h2 className="text-2xl font-bold text-secondary-900 mb-2">
+                Payment Confirmed!
+              </h2>
+              <p className="text-secondary-500 text-sm mb-4">
+                Your payment has been successfully processed.
+              </p>
+
+              <div className="bg-secondary-50 rounded-lg p-4 text-left mb-6">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-secondary-500">Transaction Code:</span>
+                    <span className="font-mono font-medium text-secondary-900">
+                      {savedTransaction?.transaction_code || paymentReference}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-secondary-500">School:</span>
+                    <span className="font-medium text-secondary-900">{formData.schoolName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-secondary-500">Amount:</span>
+                    <span className="font-bold text-primary-600">{formatCurrency(formData.amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-secondary-500">Telecom:</span>
+                    <span className="font-medium text-secondary-900">{selectedTelecom?.name}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={sendWhatsAppMessage}
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                  Send via WhatsApp
+                </button>
+                <button
+                  onClick={() => navigate('/billing')}
+                  className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  Go to Billing
+                </button>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="w-full py-3 border border-secondary-200 hover:bg-secondary-50 text-secondary-700 font-medium rounded-lg transition-colors"
+                >
+                  Dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
