@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Plus, Search, Edit, Trash2, Download, Filter, 
+  Plus, Search, Edit, Trash2, Download, 
   ChevronLeft, ChevronRight, User, Mail, Phone, 
   Loader2, Building2,
-  School, Hash, Shield, RefreshCw, X,
-  ChevronDown, ChevronUp, Users
+  School, Hash, RefreshCw, X,
+  ChevronDown, ChevronUp, Users, AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 import { studentService, schoolService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
@@ -14,7 +15,7 @@ import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal';
 import StudentModal from '../../components/modals/StudentModal';
 
 // ============================================
-// INTERFACES
+// TYPES & INTERFACES
 // ============================================
 
 interface Student {
@@ -22,6 +23,7 @@ interface Student {
   admission_number: string;
   first_name: string;
   last_name: string;
+  full_name?: string;
   email: string;
   date_of_birth: string;
   gender: string;
@@ -34,9 +36,10 @@ interface Student {
   is_active: boolean;
   school: number;
   school_code?: string;
-  full_name?: string;
+  avatar: string | null;
   created_at: string;
   updated_at: string;
+  user: number | null;
 }
 
 interface GroupedSchool {
@@ -47,17 +50,11 @@ interface GroupedSchool {
   students: Student[];
 }
 
-interface SchoolData {
-  id: number;
-  name: string;
-  email: string;
-  school_code: string;
-}
-
-interface FilterState {
-  search: string;
-  class: string;
-  schoolCode: string;
+interface ApiResponse {
+  status: string;
+  total_schools: number;
+  total_students: number;
+  data: GroupedSchool[];
 }
 
 // ============================================
@@ -69,236 +66,247 @@ const StudentList: React.FC = () => {
   const { user, isAuthenticated, school } = useAuth();
 
   // ============================================
-  // STATE
+  // STATE MANAGEMENT
   // ============================================
-  
-  // Data states
+
+  // Data States
   const [groupedStudents, setGroupedStudents] = useState<GroupedSchool[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [classes, setClasses] = useState<string[]>([]);
-  const [schools, setSchools] = useState<SchoolData[]>([]);
-  
-  // UI states
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingSchools, setIsLoadingSchools] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  const [currentSchoolInfo, setCurrentSchoolInfo] = useState<{
+    code: string;
+    name: string;
+    id: number;
+  } | null>(null);
+
+  // UI States
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoadingMySchool, setIsLoadingMySchool] = useState<boolean>(false);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
-  
-  // Filter states
-  const [filters, setFilters] = useState<FilterState>({
-    search: '',
-    class: 'all',
-    schoolCode: 'all'
-  });
-  
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalStudents, setTotalStudents] = useState(0);
-  const itemsPerPage = 10;
-  
-  // Modal states
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  // Search States
+  const [searchSchoolCode, setSearchSchoolCode] = useState<string>('');
+  const [hasSearched, setHasSearched] = useState<boolean>(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalStudentsCount, setTotalStudentsCount] = useState<number>(0);
+  const ITEMS_PER_PAGE = 10;
+
+  // Modal States
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // ============================================
-  // USER INFO - FIXED: Using only properties that exist on User
+  // DERIVED VALUES
   // ============================================
-  
-  const userRole = useMemo(() => user?.role || '', [user]);
-  
-  // Get school code from user or school context
-  const userSchoolCode = useMemo(() => {
-    // Try to get from school context first (set by AuthProvider)
-    if (school?.school_code) {
-      return school.school_code;
-    }
-    // Try from user's school_id (could be the school code)
-    if (user?.school_id) {
-      return user.school_id;
-    }
-    return null;
-  }, [user, school]);
-  
-  const userSchoolId = useMemo(() => {
-    if (school?.id) {
-      return school.id;
-    }
-    if (user?.school_id) {
-      return parseInt(user.school_id) || null;
-    }
-    return null;
-  }, [user, school]);
+
+  const userSchoolCode = school?.school_code || user?.school_id || null;
+  const userEmail = user?.email || '';
 
   // ============================================
-  // DERIVED DATA
+  // FETCH MY SCHOOL BY ADMIN EMAIL
   // ============================================
-  
-  // Check if filters are active
-  const hasActiveFilters = useMemo(() => {
-    return filters.search !== '' || 
-           filters.class !== 'all' || 
-           (userRole === 'super_admin' && filters.schoolCode !== 'all');
-  }, [filters, userRole]);
 
-  // ============================================
-  // EFFECTS
-  // ============================================
-  
-  // Load schools for Super Admin
-  useEffect(() => {
-    if (userRole === 'super_admin') {
-      loadSchools();
+  const fetchMySchoolByAdminEmail = useCallback(async () => {
+    if (!userEmail) {
+      toast.error('No email found for logged in user');
+      return;
     }
-  }, [userRole]);
 
-  // Auto-expand all schools when data loads
-  useEffect(() => {
-    if (groupedStudents.length > 0) {
-      const allCodes = new Set(groupedStudents.map(g => g.school_code));
-      setExpandedSchools(allCodes);
-    }
-  }, [groupedStudents]);
+    setIsLoadingMySchool(true);
+    setSearchError(null);
 
-  // Fetch students when filters or pagination change
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchStudents();
-    }
-  }, [filters.search, filters.class, filters.schoolCode, currentPage, isAuthenticated]);
-
-  // ============================================
-  // API CALLS
-  // ============================================
-  
-  const loadSchools = async () => {
-    setIsLoadingSchools(true);
     try {
-      const response = await schoolService.getSchools({ page_size: 100 });
-      const schoolData = response.results || response;
-      setSchools(schoolData);
-    } catch (error) {
-      console.error('Failed to load schools:', error);
-      toast.error('Failed to load schools');
+      console.log('[StudentList] Fetching my school by admin email:', userEmail);
+      
+      const response = await schoolService.getSchools({
+        admin_email: userEmail,
+        page_size: 1
+      });
+      
+      console.log('[StudentList] My school response:', response);
+      
+      const results = response.results || response;
+      
+      if (results && results.length > 0) {
+        const schoolData = results[0];
+        const schoolCode = schoolData.school_code;
+        
+        if (schoolCode) {
+          setSearchSchoolCode(schoolCode);
+          await fetchStudentsBySchoolCode(schoolCode);
+          toast.success(`Loaded students from ${schoolData.name}`);
+        } else {
+          toast.error('School code not found for your school');
+        }
+      } else {
+        toast.error('No school found for your account. Please contact administrator.');
+      }
+    } catch (error: any) {
+      console.error('[StudentList] Error fetching my school:', error);
+      toast.error(error.response?.data?.message || 'Failed to load your school');
     } finally {
-      setIsLoadingSchools(false);
+      setIsLoadingMySchool(false);
+      setIsInitialLoading(false);
     }
-  };
+  }, [userEmail]);
 
-  const fetchStudents = async () => {
-    if (!isAuthenticated) {
-      setIsLoading(false);
+  // ============================================
+  // FETCH STUDENTS BY SCHOOL CODE
+  // ============================================
+
+  const fetchStudentsBySchoolCode = useCallback(async (schoolCode: string) => {
+    if (!schoolCode || schoolCode.trim() === '') {
+      toast.error('Please enter a school code');
+      return;
+    }
+
+    // Validate format - should be 5 characters alphanumeric
+    const cleanCode = schoolCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{5}$/.test(cleanCode)) {
+      toast.error('School code must be 5 characters (letters and numbers only)');
       return;
     }
 
     setIsLoading(true);
-    setIsSearching(false);
+    setHasSearched(true);
+    setSearchError(null);
 
     try {
-      // ============================================
-      // USE THE /by-school/ ENDPOINT
-      // ============================================
-      
-      const params: any = {};
+      const response: ApiResponse = await studentService.getStudentsBySchoolCode(cleanCode);
 
-      // Apply school code filter
-      if (userRole === 'super_admin') {
-        // Super Admin: filter by selected school code
-        if (filters.schoolCode && filters.schoolCode !== 'all') {
-          params.school_code = filters.schoolCode;
-          console.log('[StudentList] Super Admin filtering by school_code:', filters.schoolCode);
-        }
-      } else {
-        // Regular/School Admin: filter by user's school code
-        if (userSchoolCode) {
-          params.school_code = userSchoolCode;
-          console.log('[StudentList] Filtering by user school_code:', userSchoolCode);
-        } else {
-          console.warn('[StudentList] No school_code found for user');
-        }
-      }
+      console.log('[StudentList] Response:', response);
 
-      console.log('[StudentList] Fetching grouped students with params:', params);
-
-      // Use the grouped by school endpoint
-      const response = await studentService.getStudentsGroupedBySchool(
-        Object.keys(params).length > 0 ? params : undefined
-      );
-      
-      console.log('[StudentList] Grouped response:', response);
-
-      if (response.status === 'success') {
+      if (response?.status === 'success') {
         const groupedData = response.data || [];
         setGroupedStudents(groupedData);
-        
-        // Extract all students from grouped data
-        const allStudents: Student[] = [];
-        groupedData.forEach((group: GroupedSchool) => {
-          allStudents.push(...group.students);
-        });
-        setStudents(allStudents);
-        setTotalStudents(response.total_students || allStudents.length);
-        setTotalPages(Math.ceil((response.total_students || allStudents.length) / itemsPerPage));
-        
-        // Extract unique classes
-        const classList = [...new Set(allStudents.map((s: Student) => s.student_class))];
-        setClasses(classList);
+
+        const students = groupedData.flatMap(group => group.students || []);
+        setAllStudents(students);
+        setTotalStudentsCount(response.total_students || students.length);
+        setTotalPages(Math.ceil((response.total_students || students.length) / ITEMS_PER_PAGE));
+
+        const classes = [...new Set(students.map(s => s.student_class).filter(Boolean))];
+        setAvailableClasses(classes);
+
+        const allSchoolCodes = new Set(groupedData.map(g => g.school_code));
+        setExpandedSchools(allSchoolCodes);
+
+        if (groupedData.length > 0) {
+          const school = groupedData[0];
+          setCurrentSchoolInfo({
+            code: school.school_code,
+            name: school.school_name,
+            id: school.school_id
+          });
+        }
+
+        if (response.total_students === 0) {
+          toast.info(`No students found in ${schoolCode}`);
+          setSearchError(`No students found in ${schoolCode}`);
+        } else {
+          toast.success(`Found ${response.total_students} students from ${schoolCode}`);
+          setSearchError(null);
+        }
       } else {
         setGroupedStudents([]);
-        setStudents([]);
-        setTotalStudents(0);
+        setAllStudents([]);
+        setTotalStudentsCount(0);
         setTotalPages(1);
-        setClasses([]);
+        setAvailableClasses([]);
+        setExpandedSchools(new Set());
+        setCurrentSchoolInfo(null);
+        setSearchError('No students found for this school code');
+        toast.error('No students found for this school code');
       }
     } catch (error: any) {
       console.error('[StudentList] Error fetching students:', error);
-      toast.error(error.response?.data?.message || 'Failed to fetch students');
+
+      let errorMsg = 'Failed to fetch students';
+      
+      if (error.response?.status === 404) {
+        errorMsg = `School with code "${schoolCode}" not found`;
+      } else if (error.response?.status === 400) {
+        errorMsg = 'Invalid school code format';
+      } else if (error.response?.status === 401) {
+        errorMsg = 'Session expired. Please login again.';
+        navigate('/login');
+        return;
+      } else if (error.response?.data?.message) {
+        errorMsg = error.response.data.message;
+      }
+      
+      setSearchError(errorMsg);
+      toast.error(errorMsg);
+      
       setGroupedStudents([]);
-      setStudents([]);
-      setTotalStudents(0);
+      setAllStudents([]);
+      setTotalStudentsCount(0);
       setTotalPages(1);
+      setAvailableClasses([]);
+      setExpandedSchools(new Set());
+      setCurrentSchoolInfo(null);
     } finally {
       setIsLoading(false);
-      setIsSearching(false);
+      setIsInitialLoading(false);
     }
-  };
+  }, [navigate]);
+
+  // ============================================
+  // AUTO-LOAD ON PAGE LOAD
+  // ============================================
+
+  useEffect(() => {
+    if (isAuthenticated && userEmail) {
+      fetchMySchoolByAdminEmail();
+    } else {
+      setIsInitialLoading(false);
+    }
+  }, [isAuthenticated, userEmail, fetchMySchoolByAdminEmail]);
 
   // ============================================
   // HANDLERS
   // ============================================
-  
-  const handleSearchChange = (value: string) => {
-    setFilters(prev => ({ ...prev, search: value }));
-    setCurrentPage(1);
-  };
 
-  const handleClassChange = (value: string) => {
-    setFilters(prev => ({ ...prev, class: value }));
-    setCurrentPage(1);
-  };
-
-  const handleSchoolCodeChange = (value: string) => {
-    setFilters(prev => ({ ...prev, schoolCode: value }));
-    setCurrentPage(1);
-  };
-
-  const clearAllFilters = () => {
-    setFilters({
-      search: '',
-      class: 'all',
-      schoolCode: 'all'
-    });
-    setCurrentPage(1);
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setCurrentPage(1);
-    fetchStudents();
+    setSearchError(null);
+    fetchStudentsBySchoolCode(searchSchoolCode);
   };
+
+  const handleClearSearch = () => {
+    setSearchSchoolCode('');
+    setGroupedStudents([]);
+    setAllStudents([]);
+    setTotalStudentsCount(0);
+    setTotalPages(1);
+    setAvailableClasses([]);
+    setExpandedSchools(new Set());
+    setCurrentSchoolInfo(null);
+    setHasSearched(false);
+    setSearchError(null);
+  };
+
+  const handleMySchool = async () => {
+    await fetchMySchoolByAdminEmail();
+  };
+
+  const handleRefresh = () => {
+    if (currentSchoolInfo?.code) {
+      fetchStudentsBySchoolCode(currentSchoolInfo.code);
+    }
+  };
+
+  // ============================================
+  // EVENT HANDLERS
+  // ============================================
 
   const handleAddStudent = () => {
     setSelectedStudent(null);
@@ -317,14 +325,16 @@ const StudentList: React.FC = () => {
 
   const confirmDelete = async () => {
     if (!selectedStudent) return;
-    
+
     setIsDeleting(true);
     try {
       await studentService.deleteStudent(selectedStudent.id);
       toast.success(`Student "${selectedStudent.first_name} ${selectedStudent.last_name}" deleted successfully`);
       setIsDeleteModalOpen(false);
       setSelectedStudent(null);
-      fetchStudents();
+      if (currentSchoolInfo?.code) {
+        fetchStudentsBySchoolCode(currentSchoolInfo.code);
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to delete student');
     } finally {
@@ -333,7 +343,9 @@ const StudentList: React.FC = () => {
   };
 
   const handleModalSuccess = () => {
-    fetchStudents();
+    if (currentSchoolInfo?.code) {
+      fetchStudentsBySchoolCode(currentSchoolInfo.code);
+    }
   };
 
   const goToPage = (page: number) => {
@@ -342,39 +354,298 @@ const StudentList: React.FC = () => {
     }
   };
 
-  const refreshData = () => {
-    fetchStudents();
-  };
-
   const toggleSchoolExpand = (schoolCode: string) => {
-    const newExpanded = new Set(expandedSchools);
-    if (newExpanded.has(schoolCode)) {
-      newExpanded.delete(schoolCode);
-    } else {
-      newExpanded.add(schoolCode);
-    }
-    setExpandedSchools(newExpanded);
+    setExpandedSchools(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(schoolCode)) {
+        newSet.delete(schoolCode);
+      } else {
+        newSet.add(schoolCode);
+      }
+      return newSet;
+    });
   };
 
   // ============================================
   // UTILITY FUNCTIONS
   // ============================================
-  
+
   const getInitials = (firstName: string, lastName: string): string => {
     if (!firstName && !lastName) return 'S';
-    return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`;
+    return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase();
   };
 
-  const getStatusBadge = (isActive: boolean) => {
+  const getStatusBadge = (isActive: boolean): string => {
     return isActive 
       ? 'bg-green-100 text-green-700'
       : 'bg-red-100 text-red-700';
   };
 
+  const getStatusText = (isActive: boolean): string => {
+    return isActive ? 'Active' : 'Inactive';
+  };
+
   // ============================================
-  // RENDER: Loading State
+  // RENDER HELPERS
   // ============================================
-  
+
+  const renderLoadingState = () => (
+    <div className="flex items-center justify-center py-16">
+      <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+      <span className="ml-3 text-secondary-500">Loading students...</span>
+    </div>
+  );
+
+  const renderEmptyState = () => {
+    if (!currentSchoolInfo && !hasSearched && !isInitialLoading) {
+      return (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <School className="w-8 h-8 text-secondary-300" />
+          </div>
+          <h3 className="text-lg font-medium text-secondary-900">Search for a School</h3>
+          <p className="text-secondary-500 mt-1 text-sm">
+            Enter a school code above to view students
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
+            {userEmail && (
+              <button
+                onClick={handleMySchool}
+                disabled={isLoadingMySchool}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {isLoadingMySchool ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
+                Continue with my school
+              </button>
+            )}
+            <button
+              onClick={handleAddStudent}
+              className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
+            >
+              <Plus className="w-4 h-4" />
+              Add Student
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (!currentSchoolInfo && hasSearched) {
+      return (
+        <div className="text-center py-16">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-secondary-900">School Not Found</h3>
+          <p className="text-secondary-500 mt-1 text-sm">
+            {searchError || 'No school found with the code you entered. Please try again.'}
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
+            <button
+              onClick={handleClearSearch}
+              className="px-4 py-2 text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors"
+            >
+              Try Again
+            </button>
+            {userEmail && (
+              <button
+                onClick={handleMySchool}
+                disabled={isLoadingMySchool}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {isLoadingMySchool ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
+                Continue with my school
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-center py-16">
+        <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Users className="w-8 h-8 text-secondary-300" />
+        </div>
+        <h3 className="text-lg font-medium text-secondary-900">
+          No students found in {currentSchoolInfo?.name}
+        </h3>
+        <p className="text-secondary-500 mt-1 text-sm">
+          Get started by adding your first student
+        </p>
+        <button
+          onClick={handleAddStudent}
+          className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+        >
+          Add Student
+        </button>
+      </div>
+    );
+  };
+
+  const renderStudentCard = (student: Student, schoolCode: string) => (
+    <div key={student.id} className="border border-secondary-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center text-primary-700 font-medium text-lg">
+            {getInitials(student.first_name, student.last_name)}
+          </div>
+          <div>
+            <h4 className="font-medium text-secondary-900">
+              {student.full_name || `${student.first_name} ${student.last_name}`}
+            </h4>
+            <p className="text-sm text-secondary-500">{student.student_class}</p>
+            <p className="text-xs text-secondary-400 flex items-center gap-1">
+              <Hash className="w-3 h-3" />
+              {schoolCode}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleEditStudent(student)}
+            className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+            title="Edit Student"
+          >
+            <Edit className="w-4 h-4 text-secondary-400" />
+          </button>
+          <button
+            onClick={() => handleDeleteStudent(student)}
+            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete Student"
+          >
+            <Trash2 className="w-4 h-4 text-red-400" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        <div className="flex items-center gap-2 text-sm text-secondary-600">
+          <Mail className="w-3.5 h-3.5 text-secondary-400 flex-shrink-0" />
+          <span className="truncate">{student.email}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-secondary-600">
+          <Phone className="w-3.5 h-3.5 text-secondary-400 flex-shrink-0" />
+          <span>{student.guardian_phone}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-secondary-600">
+          <User className="w-3.5 h-3.5 text-secondary-400 flex-shrink-0" />
+          <span>Guardian: {student.guardian_name}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-secondary-600">
+          <span className="text-secondary-400">Status:</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(student.is_active)}`}>
+            {getStatusText(student.is_active)}
+          </span>
+        </div>
+        {student.admission_number && (
+          <div className="flex items-center gap-2 text-sm text-secondary-600">
+            <span className="text-secondary-400">Admission:</span>
+            <span className="font-mono text-xs">{student.admission_number}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSchoolGroup = (group: GroupedSchool) => (
+    <div key={group.school_code} className="border border-secondary-200 rounded-xl overflow-hidden">
+      <div 
+        className="flex items-center justify-between p-4 bg-secondary-50 hover:bg-secondary-100 cursor-pointer transition-colors"
+        onClick={() => toggleSchoolExpand(group.school_code)}
+      >
+        <div className="flex items-center gap-3">
+          <School className="w-5 h-5 text-primary-600 flex-shrink-0" />
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-secondary-900">
+                {group.school_name || group.school_code}
+              </h3>
+              <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-mono rounded">
+                {group.school_code}
+              </span>
+            </div>
+            <p className="text-xs text-secondary-500">
+              {group.count} student{group.count !== 1 ? 's' : ''}
+              {group.school_id && ` • School ID: ${group.school_id}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {expandedSchools.has(group.school_code) ? (
+            <ChevronUp className="w-5 h-5 text-secondary-400" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-secondary-400" />
+          )}
+        </div>
+      </div>
+
+      {expandedSchools.has(group.school_code) && (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {group.students.map(student => renderStudentCard(student, group.school_code))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStudentList = () => (
+    <div className="space-y-6">
+      {groupedStudents.map(renderSchoolGroup)}
+    </div>
+  );
+
+  const renderPagination = () => (
+    <div className="p-4 border-t border-secondary-200 flex items-center justify-between flex-wrap gap-4">
+      <p className="text-sm text-secondary-500">
+        Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to{' '}
+        {Math.min(currentPage * ITEMS_PER_PAGE, totalStudentsCount)} of {totalStudentsCount} students
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <ChevronLeft className="w-4 h-4 text-secondary-400" />
+        </button>
+        {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+          const pageNum = i + 1;
+          return (
+            <button
+              key={pageNum}
+              onClick={() => goToPage(pageNum)}
+              className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                currentPage === pageNum
+                  ? 'bg-primary-600 text-white'
+                  : 'hover:bg-secondary-100 text-secondary-600'
+              }`}
+            >
+              {pageNum}
+            </button>
+          );
+        })}
+        {totalPages > 5 && <span className="text-secondary-400">...</span>}
+        <button
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <ChevronRight className="w-4 h-4 text-secondary-400" />
+        </button>
+      </div>
+    </div>
+  );
+
+  // ============================================
+  // MAIN RENDER
+  // ============================================
+
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -389,51 +660,17 @@ const StudentList: React.FC = () => {
     );
   }
 
-  // ============================================
-  // RENDER: Main Component
-  // ============================================
-  
+  if (isInitialLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+        <span className="ml-3 text-secondary-500">Loading your school data...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* ==========================================
-          SCHOOL CODE BANNER
-          ========================================== */}
-      {userSchoolCode && (
-        <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-lg shadow-primary-500/20 p-4 md:p-5">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                <School className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-dark/70 text-xs font-medium uppercase tracking-wider">
-                  {userRole === 'super_admin' ? 'Current School Code' : 'Your School Code'}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl md:text-3xl font-bold text-dark font-mono tracking-wider">
-                    {userSchoolCode}
-                  </span>
-                  {userRole !== 'super_admin' && (
-                    <span className="px-2 py-0.5 bg-white/20 text-dark text-xs rounded-md">
-                      Active
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 text-white/80 text-sm">
-              <div className="flex items-center gap-1">
-                <Building2 className="w-4 h-4" />
-                <span>{school?.name || 'Your School'}</span>
-              </div>
-              <div className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/30 text-green-900">
-                {userRole === 'super_admin' ? 'Super Admin' : 'School Admin'}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ==========================================
           HEADER
           ========================================== */}
@@ -444,36 +681,33 @@ const StudentList: React.FC = () => {
             Students
           </h1>
           <p className="text-secondary-500 text-sm flex items-center gap-2 flex-wrap">
-            <span>Manage all students</span>
-            {userRole === 'super_admin' && (
-              <span className="text-xs text-secondary-400 bg-secondary-100 px-2 py-0.5 rounded">
-                Super Admin - All Schools
-              </span>
-            )}
-            {userSchoolCode && userRole !== 'super_admin' && (
-              <span className="text-xs text-primary-600 bg-primary-50 px-2 py-0.5 rounded flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                School Code: {userSchoolCode}
-              </span>
-            )}
+            <span>Search students by school code</span>
           </p>
+          {currentSchoolInfo && (
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <School className="w-4 h-4 text-primary-500" />
+              <span className="text-sm font-medium text-secondary-700">
+                {currentSchoolInfo.name}
+              </span>
+              <span className="text-xs font-mono bg-primary-50 px-2 py-0.5 rounded text-primary-600 flex items-center gap-1">
+                <Hash className="w-3 h-3" />
+                {currentSchoolInfo.code}
+              </span>
+              <span className="text-xs text-secondary-400">(ID: {currentSchoolInfo.id})</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={refreshData}
-            className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button 
-            onClick={() => toast('Export feature coming soon', { icon: '📥' })}
-            className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </button>
+          {currentSchoolInfo && (
+            <button 
+              onClick={handleRefresh}
+              className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
+              disabled={isLoading}
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          )}
           <button
             onClick={handleAddStudent}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors text-sm shadow-sm shadow-primary-200"
@@ -487,339 +721,179 @@ const StudentList: React.FC = () => {
       {/* ==========================================
           STATS CARDS
           ========================================== */}
-      {totalStudents > 0 && (
+      {totalStudentsCount > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Students</p>
             <p className="text-2xl font-bold text-secondary-900 mt-1">
-              {isLoading ? '...' : totalStudents}
+              {isLoading ? '...' : totalStudentsCount}
             </p>
           </div>
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Active</p>
             <p className="text-2xl font-bold text-green-600 mt-1">
-              {isLoading ? '...' : students.filter(s => s.is_active).length}
+              {isLoading ? '...' : allStudents.filter(s => s.is_active).length}
             </p>
           </div>
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Classes</p>
             <p className="text-2xl font-bold text-purple-600 mt-1">
-              {isLoading ? '...' : classes.length}
+              {isLoading ? '...' : availableClasses.length}
             </p>
           </div>
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Inactive</p>
             <p className="text-2xl font-bold text-red-600 mt-1">
-              {isLoading ? '...' : students.filter(s => !s.is_active).length}
+              {isLoading ? '...' : allStudents.filter(s => !s.is_active).length}
             </p>
           </div>
         </div>
       )}
 
       {/* ==========================================
-          SEARCH AND FILTERS
+          SEARCH BY SCHOOL CODE
           ========================================== */}
       <div className="bg-white rounded-xl border border-secondary-200 overflow-hidden shadow-sm">
         <div className="p-4 border-b border-secondary-200">
-          <form onSubmit={handleSearchSubmit} className="flex flex-wrap gap-3 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-              <input
-                type="text"
-                placeholder="Search by name, admission, email, guardian..."
-                value={filters.search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm transition-all"
-              />
-              {filters.search && (
-                <button
-                  type="button"
-                  onClick={() => handleSearchChange('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-400 hover:text-secondary-600 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 whitespace-nowrap text-sm font-medium"
-            >
-              <Search className="w-4 h-4" />
-              Search
-            </button>
-            {filters.search && (
-              <button
-                type="button"
-                onClick={() => handleSearchChange('')}
-                className="px-4 py-2.5 text-secondary-600 hover:text-secondary-800 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors flex items-center gap-1 text-sm"
-              >
-                <X className="w-4 h-4" />
-                Clear
-              </button>
-            )}
-          </form>
-
-          <div className="mt-3 flex flex-wrap gap-3 items-center">
-            {/* Class Filter */}
-            <div className="relative min-w-[150px]">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400 pointer-events-none" />
-              <select
-                value={filters.class}
-                onChange={(e) => handleClassChange(e.target.value)}
-                className="pl-10 pr-8 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm appearance-none bg-white"
-              >
-                <option value="all">All Classes</option>
-                {classes.map((cls) => (
-                  <option key={cls} value={cls}>{cls}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* School Code Filter - Only for Super Admin */}
-            {userRole === 'super_admin' && schools.length > 0 && (
-              <div className="relative min-w-[180px]">
-                <School className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400 pointer-events-none" />
-                <select
-                  value={filters.schoolCode}
-                  onChange={(e) => handleSchoolCodeChange(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm appearance-none bg-white"
-                  disabled={isLoadingSchools}
-                >
-                  <option value="all">All Schools</option>
-                  {schools.map((school) => (
-                    <option key={school.id} value={school.school_code}>
-                      {school.name} ({school.school_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Clear All Filters Button */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="px-3 py-2 text-xs text-red-600 hover:text-red-800 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1"
-              >
-                <X className="w-3 h-3" />
-                Clear All Filters
-              </button>
-            )}
-
-            {/* Search Status */}
-            {isSearching && (
-              <span className="text-xs text-blue-600 flex items-center gap-1 animate-pulse">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Searching...
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* ==========================================
-            STUDENT LIST - GROUPED BY SCHOOL
-            ========================================== */}
-        <div className="p-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-              <span className="ml-3 text-secondary-500">Loading students...</span>
-            </div>
-          ) : groupedStudents.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-secondary-300" />
-              </div>
-              <h3 className="text-lg font-medium text-secondary-900">
-                {filters.search ? 'No students match your search' : 'No students found'}
-              </h3>
-              <p className="text-secondary-500 mt-1 text-sm">
-                {filters.search 
-                  ? 'Try adjusting your search terms or clear filters' 
-                  : 'Get started by adding your first student'}
-              </p>
-              {(hasActiveFilters || filters.search) && (
-                <button
-                  onClick={clearAllFilters}
-                  className="mt-3 px-4 py-2 text-primary-600 hover:text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors text-sm"
-                >
-                  Clear All Filters
-                </button>
-              )}
-              <button
-                onClick={handleAddStudent}
-                className="mt-3 ml-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
-              >
-                Add Student
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {groupedStudents.map((group) => (
-                <div key={group.school_code} className="border border-secondary-200 rounded-xl overflow-hidden">
-                  {/* School Header - Clickable to expand/collapse */}
-                  <div 
-                    className="flex items-center justify-between p-4 bg-secondary-50 hover:bg-secondary-100 cursor-pointer transition-colors"
-                    onClick={() => toggleSchoolExpand(group.school_code)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <School className="w-5 h-5 text-primary-600" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-secondary-900">
-                            {group.school_name || group.school_code}
-                          </h3>
-                          <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-mono rounded">
-                            {group.school_code}
-                          </span>
-                        </div>
-                        <p className="text-xs text-secondary-500">
-                          {group.count} student{group.count !== 1 ? 's' : ''}
-                          {group.school_id && ` • School ID: ${group.school_id}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {expandedSchools.has(group.school_code) ? (
-                        <ChevronUp className="w-5 h-5 text-secondary-400" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-secondary-400" />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Student Cards - Expandable */}
-                  {expandedSchools.has(group.school_code) && (
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {group.students.map((student) => (
-                        <div key={student.id} className="border border-secondary-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center text-primary-700 font-medium text-lg">
-                                {getInitials(student.first_name, student.last_name)}
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-secondary-900">
-                                  {student.full_name || `${student.first_name} ${student.last_name}`}
-                                </h4>
-                                <p className="text-sm text-secondary-500">{student.student_class}</p>
-                                <p className="text-xs text-secondary-400 flex items-center gap-1">
-                                  <Hash className="w-3 h-3" />
-                                  {group.school_code}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleEditStudent(student)}
-                                className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
-                                title="Edit Student"
-                              >
-                                <Edit className="w-4 h-4 text-secondary-400" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteStudent(student)}
-                                className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Delete Student"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-400" />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 space-y-1.5">
-                            <div className="flex items-center gap-2 text-sm text-secondary-600">
-                              <Mail className="w-3.5 h-3.5 text-secondary-400" />
-                              <span className="truncate">{student.email}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-secondary-600">
-                              <Phone className="w-3.5 h-3.5 text-secondary-400" />
-                              <span>{student.guardian_phone}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-secondary-600">
-                              <User className="w-3.5 h-3.5 text-secondary-400" />
-                              <span>Guardian: {student.guardian_name}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-secondary-600">
-                              <span className="text-secondary-400">Status:</span>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(student.is_active)}`}>
-                                {student.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            {student.admission_number && (
-                              <div className="flex items-center gap-2 text-sm text-secondary-600">
-                                <span className="text-secondary-400">Admission:</span>
-                                <span className="font-mono text-xs">{student.admission_number}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+            <div className="flex-1 w-full">
+              <label className="text-sm font-medium text-secondary-700 mb-1 block">
+                Search by School Code
+              </label>
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <div className="relative flex-1">
+                  <School className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="text"
+                    placeholder="Enter school code (e.g., AY8NH)"
+                    value={searchSchoolCode}
+                    onChange={(e) => {
+                      const value = e.target.value.toUpperCase();
+                      if (/^[A-Z0-9]*$/.test(value) || value === '') {
+                        setSearchSchoolCode(value);
+                        setSearchError(null);
+                      }
+                    }}
+                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm transition-all uppercase ${
+                      searchError ? 'border-red-500' : 'border-secondary-200'
+                    }`}
+                    maxLength={10}
+                  />
+                  {searchError && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <AlertCircle className="w-5 h-5 text-red-500" />
                     </div>
                   )}
                 </div>
-              ))}
+                <button
+                  type="submit"
+                  disabled={isLoading || !searchSchoolCode.trim()}
+                  className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 whitespace-nowrap text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                  Search
+                </button>
+                {hasSearched && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="px-4 py-2.5 text-secondary-600 hover:text-secondary-800 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors flex items-center gap-1 text-sm"
+                  >
+                    <X className="w-4 h-4" />
+                    Clear
+                  </button>
+                )}
+              </form>
+              {searchError && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {searchError}
+                </p>
+              )}
+              <p className="text-xs text-secondary-400 mt-1">
+                Enter a 5-character school code to view its students
+              </p>
             </div>
+          </div>
+
+          {/* My School Button - Below the search */}
+          {userEmail && !currentSchoolInfo && !isLoading && !isInitialLoading && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-px flex-1 bg-secondary-200" />
+              <button
+                onClick={handleMySchool}
+                disabled={isLoadingMySchool}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm disabled:opacity-50 whitespace-nowrap"
+              >
+                {isLoadingMySchool ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
+                Continue with my school
+              </button>
+              <div className="h-px flex-1 bg-secondary-200" />
+            </div>
+          )}
+
+          {/* Current School Info */}
+          {currentSchoolInfo && !searchError && (
+            <div className="mt-3 bg-primary-50 border border-primary-200 rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <School className="w-5 h-5 text-primary-600" />
+                <div>
+                  <p className="text-sm font-medium text-secondary-900">
+                    {currentSchoolInfo.name}
+                  </p>
+                  <p className="text-xs text-secondary-500">
+                    Code: {currentSchoolInfo.code} • ID: {currentSchoolInfo.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="p-1.5 hover:bg-primary-100 rounded-lg transition-colors"
+                title="Refresh"
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 text-primary-600 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ==========================================
+            STUDENT LIST CONTENT
+            ========================================== */}
+        <div className="p-4">
+          {isLoading ? (
+            renderLoadingState()
+          ) : groupedStudents.length === 0 ? (
+            renderEmptyState()
+          ) : (
+            renderStudentList()
           )}
         </div>
 
         {/* ==========================================
             PAGINATION
             ========================================== */}
-        {!isLoading && students.length > 0 && (
-          <div className="p-4 border-t border-secondary-200 flex items-center justify-between flex-wrap gap-4">
-            <p className="text-sm text-secondary-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
-              {Math.min(currentPage * itemsPerPage, totalStudents)} of {totalStudents} students
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4 text-secondary-400" />
-              </button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                const pageNum = i + 1;
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => goToPage(pageNum)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                      currentPage === pageNum
-                        ? 'bg-primary-600 text-white'
-                        : 'hover:bg-secondary-100 text-secondary-600'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              {totalPages > 5 && <span className="text-secondary-400">...</span>}
-              <button
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4 text-secondary-400" />
-              </button>
-            </div>
-          </div>
-        )}
+        {!isLoading && allStudents.length > 0 && renderPagination()}
       </div>
 
       {/* ==========================================
-          MODALS - REMOVED schoolCode prop since it doesn't exist on StudentModal
+          MODALS
           ========================================== */}
       <StudentModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={handleModalSuccess}
         mode="add"
-        schoolId={userRole === 'super_admin' ? undefined : Number(userSchoolId)}
+        schoolId={currentSchoolInfo?.id}
       />
 
       <StudentModal
@@ -828,7 +902,7 @@ const StudentList: React.FC = () => {
         onSuccess={handleModalSuccess}
         student={selectedStudent}
         mode="edit"
-        schoolId={userRole === 'super_admin' ? undefined : Number(userSchoolId)}
+        schoolId={currentSchoolInfo?.id}
       />
 
       <DeleteConfirmModal

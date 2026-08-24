@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Search, Filter, Eye, MoreVertical, Download, 
   ChevronLeft, ChevronRight, Building2, Mail, Phone,
   CheckCircle, XCircle, AlertCircle, Clock, Loader2,
-  PlusCircle, Edit, Trash2, Hash
+  PlusCircle, Edit, Trash2, Hash, Users, BookOpen,
+  FileText, User, RefreshCw, School
 } from 'lucide-react';
-import { schoolService } from '../../api/schoolApi';
+import { schoolService, studentService, teacherService, subjectService, resultService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import SchoolModal from '../../components/modals/SchoolModal';
@@ -32,6 +33,13 @@ interface School {
   last_active: string;
 }
 
+interface SchoolStats {
+  students: number;
+  teachers: number;
+  subjects: number;
+  results: number;
+}
+
 const AllSchools: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -43,6 +51,8 @@ const AllSchools: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [schoolStats, setSchoolStats] = useState<Record<number, SchoolStats>>({});
+  const [isLoadingStats, setIsLoadingStats] = useState<Record<number, boolean>>({});
   const itemsPerPage = 10;
 
   // Modal states
@@ -60,11 +70,8 @@ const AllSchools: React.FC = () => {
     suspended: 0,
   });
 
-  useEffect(() => {
-    fetchSchools();
-  }, [searchTerm, filterPlan, filterStatus, currentPage]);
-
-  const fetchSchools = async () => {
+  // Fetch schools
+  const fetchSchools = useCallback(async () => {
     setIsLoading(true);
     try {
       const params: any = {
@@ -84,23 +91,31 @@ const AllSchools: React.FC = () => {
 
       const response = await schoolService.getSchools(params);
       
+      let schoolData: School[] = [];
+      let totalCount = 0;
+      
       if (response.results) {
-        setSchools(response.results);
-        setTotalSchools(response.count);
-        setTotalPages(Math.ceil(response.count / itemsPerPage));
+        schoolData = response.results;
+        totalCount = response.count;
       } else {
-        setSchools(response);
-        setTotalSchools(response.length);
-        setTotalPages(Math.ceil(response.length / itemsPerPage));
+        schoolData = response;
+        totalCount = response.length;
       }
+      
+      setSchools(schoolData);
+      setTotalSchools(totalCount);
+      setTotalPages(Math.ceil(totalCount / itemsPerPage));
 
-      const allSchools = response.results || response;
-      const activeCount = allSchools.filter((s: School) => s.status === 'active').length;
-      const expiredCount = allSchools.filter((s: School) => s.status === 'expired').length;
-      const suspendedCount = allSchools.filter((s: School) => s.status === 'suspended').length;
+      // Fetch stats for each school
+      await fetchStatsForSchools(schoolData);
+
+      // Calculate summary stats
+      const activeCount = schoolData.filter((s: School) => s.status === 'active').length;
+      const expiredCount = schoolData.filter((s: School) => s.status === 'expired').length;
+      const suspendedCount = schoolData.filter((s: School) => s.status === 'suspended').length;
 
       setStats({
-        total: allSchools.length,
+        total: schoolData.length,
         active: activeCount,
         expired: expiredCount,
         suspended: suspendedCount,
@@ -112,7 +127,79 @@ const AllSchools: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [currentPage, searchTerm, filterPlan, filterStatus, itemsPerPage]);
+
+  // Fetch stats for each school
+  const fetchStatsForSchools = async (schoolData: School[]) => {
+    for (const school of schoolData) {
+      const schoolId = school.id;
+      const schoolCode = school.school_code;
+      
+      if (!schoolCode) continue;
+      
+      setIsLoadingStats(prev => ({ ...prev, [schoolId]: true }));
+      
+      try {
+        // Fetch students count
+        const studentsResponse = await studentService.getStudents({
+          school_code: schoolCode,
+          page_size: 1
+        });
+        const studentsCount = studentsResponse.count || studentsResponse.results?.length || 0;
+        
+        // Fetch teachers count
+        const teachersResponse = await teacherService.getTeachers({
+          school_code: schoolCode,
+          page_size: 1
+        });
+        const teachersCount = teachersResponse.count || teachersResponse.results?.length || 0;
+        
+        // Fetch subjects count
+        const subjectsResponse = await subjectService.getSubjects({
+          school_code: schoolCode,
+          page_size: 1
+        });
+        const subjectsCount = subjectsResponse.count || subjectsResponse.results?.length || 0;
+        
+        // Fetch results count
+        const resultsResponse = await resultService.getResults({
+          school_code: schoolCode,
+          page_size: 1
+        });
+        const resultsCount = resultsResponse.count || resultsResponse.results?.length || 0;
+        
+        setSchoolStats(prev => ({
+          ...prev,
+          [schoolId]: {
+            students: studentsCount,
+            teachers: teachersCount,
+            subjects: subjectsCount,
+            results: resultsCount,
+          }
+        }));
+        
+      } catch (error) {
+        console.error(`Failed to fetch stats for school ${schoolId}:`, error);
+        // Set default values on error
+        setSchoolStats(prev => ({
+          ...prev,
+          [schoolId]: {
+            students: 0,
+            teachers: 0,
+            subjects: 0,
+            results: 0,
+          }
+        }));
+      } finally {
+        setIsLoadingStats(prev => ({ ...prev, [schoolId]: false }));
+      }
+    }
   };
+
+  // Load data on mount and when filters change
+  useEffect(() => {
+    fetchSchools();
+  }, [fetchSchools]);
 
   const handleAddSchool = () => {
     setSelectedSchool(null);
@@ -147,6 +234,10 @@ const AllSchools: React.FC = () => {
   };
 
   const handleModalSuccess = () => {
+    fetchSchools();
+  };
+
+  const handleRefresh = () => {
     fetchSchools();
   };
 
@@ -222,11 +313,19 @@ const AllSchools: React.FC = () => {
           <p className="text-secondary-500">Manage all schools in the system</p>
           {user && (
             <p className="text-xs text-secondary-400">
-              Logged in as: {user.email} (Admin email will be auto-assigned)
+              Logged in as: {user.email}
             </p>
           )}
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm"
+            disabled={isLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
           <button 
             onClick={handleAddSchool}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors text-sm"
@@ -344,92 +443,133 @@ const AllSchools: React.FC = () => {
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Plan</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Students</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Teachers</th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Subjects</th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Results</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Joined</th>
                   <th className="text-right py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-secondary-100">
-                {schools.map((school) => (
-                  <tr key={school.id} className="hover:bg-secondary-50 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
-                        <Hash className="w-3.5 h-3.5 text-primary-500" />
-                        <span className="font-mono font-medium text-primary-600 text-sm">
-                          {school.school_code || 'N/A'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div>
-                        <p className="font-medium text-secondary-900 text-sm">{school.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-secondary-400">
-                          <Mail className="w-3 h-3" />
-                          <span>{school.email}</span>
+                {schools.map((school) => {
+                  const stats = schoolStats[school.id] || { students: 0, teachers: 0, subjects: 0, results: 0 };
+                  const isLoadingStat = isLoadingStats[school.id];
+                  
+                  return (
+                    <tr key={school.id} className="hover:bg-secondary-50 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <Hash className="w-3.5 h-3.5 text-primary-500" />
+                          <span className="font-mono font-medium text-primary-600 text-sm">
+                            {school.school_code || 'N/A'}
+                          </span>
                         </div>
-                        {school.phone && (
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="font-medium text-secondary-900 text-sm">{school.name}</p>
                           <div className="flex items-center gap-2 text-xs text-secondary-400">
-                            <Phone className="w-3 h-3" />
-                            <span>{school.phone}</span>
+                            <Mail className="w-3 h-3" />
+                            <span>{school.email}</span>
+                          </div>
+                          {school.phone && (
+                            <div className="flex items-center gap-2 text-xs text-secondary-400">
+                              <Phone className="w-3 h-3" />
+                              <span>{school.phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="text-sm text-secondary-700">{school.admin_name || 'N/A'}</p>
+                          <p className="text-xs text-secondary-400">{school.admin_email || 'N/A'}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPlanColor(school.plan)}`}>
+                          {getPlanLabel(school.plan)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {isLoadingStat ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-blue-500" />
+                            <span>{stats.students}</span>
                           </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div>
-                        <p className="text-sm text-secondary-700">{school.admin_name || 'N/A'}</p>
-                        <p className="text-xs text-secondary-400">{school.admin_email || 'N/A'}</p>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPlanColor(school.plan)}`}>
-                        {getPlanLabel(school.plan)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-secondary-600">
-                      {school.total_students || 0}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-secondary-600">
-                      {school.total_teachers || 0}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5">
-                        {getStatusIcon(school.status)}
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(school.status)}`}>
-                          {school.status.charAt(0).toUpperCase() + school.status.slice(1)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-secondary-500">
-                      {formatDate(school.created_at)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link
-                          to={`/system/schools/${school.id}`}
-                          className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
-                          title="View School"
-                        >
-                          <Eye className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
-                        </Link>
-                        <button
-                          onClick={() => handleEditSchool(school)}
-                          className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
-                          title="Edit School"
-                        >
-                          <Edit className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSchool(school)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete School"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400 hover:text-red-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {isLoadingStat ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-purple-500" />
+                            <span>{stats.teachers}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {isLoadingStat ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <BookOpen className="w-3.5 h-3.5 text-green-500" />
+                            <span>{stats.subjects}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {isLoadingStat ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <FileText className="w-3.5 h-3.5 text-orange-500" />
+                            <span>{stats.results}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5">
+                          {getStatusIcon(school.status)}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(school.status)}`}>
+                            {school.status.charAt(0).toUpperCase() + school.status.slice(1)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-500">
+                        {formatDate(school.created_at)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            to={`/system/schools/${school.id}`}
+                            className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                            title="View School"
+                          >
+                            <Eye className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
+                          </Link>
+                          <button
+                            onClick={() => handleEditSchool(school)}
+                            className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                            title="Edit School"
+                          >
+                            <Edit className="w-4 h-4 text-secondary-400 hover:text-secondary-600" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSchool(school)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete School"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-400 hover:text-red-600" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

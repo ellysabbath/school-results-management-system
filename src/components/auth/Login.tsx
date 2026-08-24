@@ -146,10 +146,10 @@ const Login: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-secondary-700 mb-1">
-                Username or Email <span className="text-red-500">*</span>
+                Username <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                <User className="absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                 <input
                   type="text"
                   value={username}
@@ -158,7 +158,7 @@ const Login: React.FC = () => {
                     setError('');
                     setRequiresVerification(false);
                   }}
-                  placeholder="Enter username or email"
+                  placeholder="Enter username"
                   className="input-field pl-10"
                   disabled={isLoading}
                 />
@@ -170,7 +170,7 @@ const Login: React.FC = () => {
                 Password <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                <Lock className="absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}

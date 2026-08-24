@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Save, User, Mail, Phone, Lock, Camera, 
@@ -6,9 +6,11 @@ import {
   Calendar, Clock, Activity, Shield, Award,
   Building2, Users, BookOpen, FileText,
   ChevronDown, ChevronUp, Copy, Eye, EyeOff,
-  LogIn, LogOut, Edit, Trash2, Plus
+  LogIn, LogOut, Edit, Trash2, Plus, School,
+  Hash
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { schoolService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 
 interface ActivityLog {
@@ -17,6 +19,16 @@ interface ActivityLog {
   ip_address: string;
   user_agent: string;
   created_at: string;
+}
+
+interface SchoolData {
+  id: number;
+  name: string;
+  school_code: string;
+  email: string;
+  phone: string;
+  address: string;
+  status: string;
 }
 
 const ProfileSettings: React.FC = () => {
@@ -32,6 +44,10 @@ const ProfileSettings: React.FC = () => {
   const [isLoadingActivities, setIsLoadingActivities] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState('');
+  
+  // School data state
+  const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
+  const [isLoadingSchool, setIsLoadingSchool] = useState(false);
 
   const [profile, setProfile] = useState({
     first_name: user?.first_name || '',
@@ -44,6 +60,68 @@ const ProfileSettings: React.FC = () => {
     confirmPassword: '',
   });
 
+  // ============================================
+  // FETCH SCHOOL CODE FROM USER
+  // ============================================
+
+  const fetchSchoolCode = useCallback(async () => {
+    if (!user?.school_id) {
+      console.log('[ProfileSettings] No school_id found for user');
+      return;
+    }
+
+    setIsLoadingSchool(true);
+    try {
+      // Try to get school by school_code
+      const response = await schoolService.getSchools({
+        school_code: user.school_id,
+        page_size: 1
+      });
+      
+      console.log('[ProfileSettings] Fetch school by code response:', response);
+      
+      const results = response.results || response;
+      if (results && results.length > 0) {
+        const school = results[0];
+        setSchoolData({
+          id: school.id,
+          name: school.name || '',
+          school_code: school.school_code || '',
+          email: school.email || '',
+          phone: school.phone || '',
+          address: school.address || '',
+          status: school.status || 'active',
+        });
+        console.log('[ProfileSettings] School data loaded:', school);
+      } else {
+        // If no school found, use the school_id from user
+        setSchoolData({
+          id: 0,
+          name: 'Unknown School',
+          school_code: user.school_id,
+          email: '',
+          phone: '',
+          address: '',
+          status: 'active',
+        });
+      }
+    } catch (error) {
+      console.error('[ProfileSettings] Failed to fetch school:', error);
+      // Use school_id from user as fallback
+      setSchoolData({
+        id: 0,
+        name: 'Unknown School',
+        school_code: user.school_id,
+        email: '',
+        phone: '',
+        address: '',
+        status: 'active',
+      });
+    } finally {
+      setIsLoadingSchool(false);
+    }
+  }, [user?.school_id]);
+
   // Load user data when user changes
   useEffect(() => {
     if (user) {
@@ -55,8 +133,10 @@ const ProfileSettings: React.FC = () => {
         phone: user.phone || '',
         username: user.username || '',
       }));
+      // Fetch school code when user data is loaded
+      fetchSchoolCode();
     }
-  }, [user]);
+  }, [user, fetchSchoolCode]);
 
   // Fetch activities when component mounts
   useEffect(() => {
@@ -67,13 +147,35 @@ const ProfileSettings: React.FC = () => {
     setIsLoadingActivities(true);
     try {
       const response = await getActivityLogs();
-      if (response.status === 'success') {
-        setActivities(response.data || []);
+      console.log('[ProfileSettings] Activity logs response:', response);
+      
+      let activityData = [];
+      
+      if (response && response.status === 'success') {
+        if (response.data && Array.isArray(response.data)) {
+          activityData = response.data;
+        } 
+        else if (response.results && Array.isArray(response.results)) {
+          activityData = response.results;
+        }
+        else if (Array.isArray(response)) {
+          activityData = response;
+        }
+      } 
+      else if (Array.isArray(response)) {
+        activityData = response;
       }
+      else if (response && response.results && Array.isArray(response.results)) {
+        activityData = response.results;
+      }
+      
+      console.log('[ProfileSettings] Processed activities:', activityData);
+      setActivities(activityData);
+      
     } catch (error) {
-      console.error('Failed to fetch activities:', error);
-      // Only show error, no demo data
+      console.error('[ProfileSettings] Failed to fetch activities:', error);
       toast.error('Failed to load activity logs');
+      setActivities([]);
     } finally {
       setIsLoadingActivities(false);
     }
@@ -110,7 +212,6 @@ const ProfileSettings: React.FC = () => {
       isValid = false;
     }
 
-    // Password validation (only if changing password)
     if (profile.newPassword || profile.currentPassword || profile.confirmPassword) {
       if (!profile.currentPassword) {
         newErrors.currentPassword = 'Current password is required to change password';
@@ -153,7 +254,6 @@ const ProfileSettings: React.FC = () => {
         phone: profile.phone?.trim() || '',
       };
 
-      // Include password change if provided
       if (profile.newPassword) {
         updateData.current_password = profile.currentPassword;
         updateData.new_password = profile.newPassword;
@@ -165,16 +265,13 @@ const ProfileSettings: React.FC = () => {
       if (response.status === 'success') {
         setSuccessMessage('Profile updated successfully!');
         toast.success('Profile updated successfully!');
-        // Refresh user data
         await getProfile();
-        // Clear password fields
         setProfile(prev => ({
           ...prev,
           currentPassword: '',
           newPassword: '',
           confirmPassword: '',
         }));
-        // Refresh activities
         fetchActivities();
       }
     } catch (error: any) {
@@ -254,7 +351,11 @@ const ProfileSettings: React.FC = () => {
     return <Activity className="w-4 h-4 text-gray-500" />;
   };
 
-  // Show loading state
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('School code copied to clipboard!');
+  };
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -277,10 +378,67 @@ const ProfileSettings: React.FC = () => {
           <ArrowLeft className="w-5 h-5 text-secondary-600" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900">Profile Settings</h1>
+          <h1 
+            className="text-2xl font-bold text-secondary-900"
+            style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+          >
+            Profile Settings
+          </h1>
           <p className="text-secondary-500">Manage your personal information and view account activity</p>
         </div>
       </div>
+
+      {/* School Code Banner - Fetched from API */}
+      {isLoadingSchool ? (
+        <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex items-center justify-center gap-3">
+          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+          <span className="text-gray-400 text-sm">Loading school code...</span>
+        </div>
+      ) : schoolData?.school_code && (
+        <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-lg shadow-primary-500/20 p-4 md:p-5">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                <School className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-white/70 text-xs font-medium uppercase tracking-wider">
+                  {schoolData.name || 'School Code'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span 
+                    className="text-2xl md:text-3xl font-bold text-white tracking-wider"
+                    style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+                  >
+                    {schoolData.school_code}
+                  </span>
+                  <span className="px-2 py-0.5 bg-white/20 text-white text-xs rounded-md">
+                    {schoolData.status === 'active' ? 'Active' : schoolData.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-white/80 text-sm">
+              {schoolData.email && (
+                <div className="flex items-center gap-1">
+                  <Mail className="w-4 h-4" />
+                  <span>{schoolData.email}</span>
+                </div>
+              )}
+              <button
+                onClick={() => copyToClipboard(schoolData.school_code)}
+                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors flex items-center gap-2 text-white text-sm"
+              >
+                <Copy className="w-4 h-4" />
+                Copy Code
+              </button>
+              <div className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/30 text-white">
+                {getRoleLabel(user?.role)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success Message */}
       {successMessage && (
@@ -294,7 +452,10 @@ const ProfileSettings: React.FC = () => {
         {/* Main Form */}
         <div className="lg:col-span-2 space-y-6">
           <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-secondary-200 p-6">
-            <h3 className="text-sm font-semibold text-secondary-700 mb-4 flex items-center gap-2">
+            <h3 
+              className="text-sm font-semibold text-secondary-700 mb-4 flex items-center gap-2"
+              style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+            >
               <User className="w-4 h-4 text-primary-500" />
               Personal Information
             </h3>
@@ -396,7 +557,10 @@ const ProfileSettings: React.FC = () => {
             </div>
 
             {/* Change Password Section */}
-            <h3 className="text-sm font-semibold text-secondary-700 mt-6 mb-4 flex items-center gap-2">
+            <h3 
+              className="text-sm font-semibold text-secondary-700 mt-6 mb-4 flex items-center gap-2"
+              style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+            >
               <Lock className="w-4 h-4 text-primary-500" />
               Change Password
             </h3>
@@ -549,20 +713,16 @@ const ProfileSettings: React.FC = () => {
                 <Camera className="w-4 h-4 text-white" />
               </button>
             </div>
-            <h3 className="text-lg font-semibold text-secondary-900 mt-3">
+            <h3 
+              className="text-lg font-semibold text-secondary-900 mt-3"
+              style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+            >
               {getFullName()}
             </h3>
             <p className="text-sm text-secondary-500">{user?.email}</p>
             <span className={`inline-block mt-2 px-3 py-1 text-xs font-medium rounded-full ${getRoleColor(user?.role)}`}>
               {getRoleLabel(user?.role)}
             </span>
-            
-            {user?.school_id && (
-              <div className="mt-3 flex items-center justify-center gap-2 text-sm text-secondary-600">
-                <Building2 className="w-4 h-4" />
-                <span>School ID: {user.school_id}</span>
-              </div>
-            )}
             
             <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
               <div className="flex items-center gap-2 justify-center text-sm text-green-700">
@@ -580,7 +740,17 @@ const ProfileSettings: React.FC = () => {
             >
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-primary-500" />
-                <h3 className="font-semibold text-secondary-900">Activity Logs</h3>
+                <h3 
+                  className="font-semibold text-secondary-900"
+                  style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+                >
+                  Activity Logs
+                </h3>
+                {activities.length > 0 && (
+                  <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
+                    {activities.length}
+                  </span>
+                )}
               </div>
               {showActivities ? (
                 <ChevronUp className="w-4 h-4 text-secondary-400" />
@@ -614,42 +784,82 @@ const ProfileSettings: React.FC = () => {
                             <p className="text-sm font-medium text-secondary-900 truncate">
                               {activity.action}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <Clock className="w-3 h-3 text-secondary-400" />
                               <span className="text-xs text-secondary-400">
                                 {formatDate(activity.created_at)}
                               </span>
+                              {activity.ip_address && (
+                                <>
+                                  <Shield className="w-3 h-3 text-secondary-400 ml-1" />
+                                  <span className="text-xs text-secondary-400">
+                                    IP: {activity.ip_address}
+                                  </span>
+                                </>
+                              )}
                             </div>
-                            {activity.ip_address && (
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <Shield className="w-3 h-3 text-secondary-400" />
-                                <span className="text-xs text-secondary-400">
-                                  IP: {activity.ip_address}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
+                
+                <button
+                  onClick={fetchActivities}
+                  className="mt-3 w-full text-center text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Refresh logs
+                </button>
               </div>
             )}
           </div>
 
-          {/* Security Tip */}
-          <div className="bg-primary-50 border border-primary-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <Shield className="w-4 h-4 text-primary-600 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-primary-900">Security Tip</p>
-                <p className="text-xs text-primary-700">
-                  Use a strong password with at least 8 characters, including numbers and special characters.
-                </p>
+          {/* ==========================================
+              SCHOOL CODE SECTION - SIDEBAR
+              ========================================== */}
+          {isLoadingSchool ? (
+            <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex items-center justify-center gap-3">
+              <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+              <span className="text-gray-400 text-sm">Loading...</span>
+            </div>
+          ) : schoolData?.school_code && (
+            <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0">
+                    <School className="w-5 h-5 text-gray-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">
+                      School Code
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span 
+                        className="text-xl md:text-2xl font-bold text-white tracking-wider truncate"
+                        style={{ fontFamily: 'Broadway, "Broadway BT", cursive, serif' }}
+                      >
+                        {schoolData.school_code}
+                      </span>
+                      <span className="px-2 py-0.5 bg-gray-800 text-gray-400 text-xs rounded-md border border-gray-700 flex-shrink-0">
+                        {schoolData.status === 'active' ? 'Active' : schoolData.status}
+                      </span>
+                    </div>
+                    {schoolData.name && schoolData.name !== 'Unknown School' && (
+                      <p className="text-xs text-gray-500 truncate">{schoolData.name}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(schoolData.school_code)}
+                  className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors flex items-center justify-center gap-2 text-gray-300 text-sm border border-gray-700"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Code
+                </button>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

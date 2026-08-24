@@ -57,6 +57,13 @@ import BillingHistory from './components/billing/BillingHistory';
 import VerifyEmail from './components/auth/VerifyEmail';
 import ResetPassword from './components/auth/ResetPassword';
 import RegisterSchool from './components/auth/RegisterSchool';
+import TermManager from './components/results/TermManager';
+import ResultManagement from './components/results/ResultManagement';
+import SubscriptionManagement from './pages/SubscriptionManagement';
+import NotificationCenter from './pages/NotificationCenter';
+import SubscriptionPlans from './components/billing/SubscriptionPlans';
+import PaymentMethod from './components/billing/PaymentMethod';
+import PaymentPage from './components/billing/PaymentPage';
 
 const App: React.FC = () => {
   // Mock user for sidebar display
@@ -135,6 +142,23 @@ const App: React.FC = () => {
               </Layout>
             }
           />
+
+
+          <Route 
+          path="/subscription" element={
+            <Layout>
+              <SubscriptionManagement />
+            </Layout>
+          
+          } />
+        <Route 
+        path="/notifications" element={
+          <Layout>
+            <NotificationCenter />
+          </Layout>
+       
+      } 
+        />
           
           {/* School Admin Dashboard */}
           <Route
@@ -269,6 +293,55 @@ const App: React.FC = () => {
               </Layout>
             }
           />
+
+          <Route
+            path="/manage-plans"
+            element={
+              <Layout>
+                <SubscriptionPlans />
+              </Layout>
+            }
+          />
+
+
+
+          <Route
+            path="/manage-payments"
+            element={
+              <Layout>
+                <PaymentMethod />
+              </Layout>
+            }
+          />
+
+
+
+          <Route
+            path="/payment"
+            element={
+              <Layout>
+                <PaymentPage />
+              </Layout>
+            }
+          />
+
+
+
+          <Route
+          path="/terms" element={
+          <Layout>
+             <TermManager />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/view-results" element={
+          <Layout>
+             <ResultManagement />
+            </Layout>
+          }
+        />
           
           <Route
             path="/my-results"

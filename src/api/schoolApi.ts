@@ -178,12 +178,29 @@ export const schoolService = {
 // ============================================
 // STUDENT SERVICES - WITH SCHOOL_CODE FILTER
 // ============================================
-
 // ============================================
-// STUDENT SERVICES - WITH SCHOOL_CODE FILTER
+// STUDENT SERVICES - COMPLETE
 // ============================================
 
 export const studentService = {
+  /**
+   * Get students by school code
+   * @param schoolCode - School code to search for (e.g., AY8NH)
+   */
+  getStudentsBySchoolCode: async (schoolCode: string) => {
+    if (!schoolCode || schoolCode.trim() === '') {
+      throw new Error('School code is required');
+    }
+    
+    const url = `/schools/students/by-school/?school_code=${encodeURIComponent(schoolCode.trim().toUpperCase())}`;
+    console.log('[studentService] Fetching students for school:', schoolCode);
+    console.log('[studentService] URL:', url);
+    
+    const response = await schoolApi.get(url);
+    console.log('[studentService] Response:', response.data);
+    return response.data;
+  },
+
   /**
    * Get all students with optional filters
    * @param params - Filter parameters (school, school_code, class, search, etc.)
@@ -257,28 +274,6 @@ export const studentService = {
   },
 
   /**
-   * Get students by school code
-   * @param schoolCode - School code
-   * @param params - Additional filters
-   */
-  getStudentsBySchoolCode: async (schoolCode: string, params?: any) => {
-    const response = await schoolApi.get('/schools/students/', {
-      params: { ...params, school_code: schoolCode }
-    });
-    return response.data;
-  },
-
-  /**
-   * Get students grouped by school
-   * This uses the /by-school/ endpoint
-   * @param params - Optional filters (school_code, etc.)
-   */
-  getStudentsGroupedBySchool: async (params?: any) => {
-    const response = await schoolApi.get('/schools/students/by-school/', { params });
-    return response.data;
-  },
-
-  /**
    * Get students by email
    * @param email - Student email
    * @param params - Additional filters
@@ -323,9 +318,12 @@ export const studentService = {
     return response.data;
   },
 };
-
 // ============================================
 // TEACHER SERVICES
+// ============================================
+
+// ============================================
+// TEACHER SERVICES - ADD GROUPED BY SCHOOL
 // ============================================
 
 export const teacherService = {
@@ -413,10 +411,21 @@ export const teacherService = {
 
   /**
    * Get teachers grouped by school
-   * @param params - Optional filters
+   * GET /api/schools/teachers/by-school/
+   * GET /api/schools/teachers/by-school/?school_code=AY8NH
+   * @param schoolCode - Optional school code to filter by
    */
-  getTeachersGroupedBySchool: async (params?: any) => {
-    const response = await schoolApi.get('/schools/teachers/by-school/', { params });
+  getTeachersGroupedBySchool: async (schoolCode?: string) => {
+    let url = '/schools/teachers/by-school/';
+    
+    if (schoolCode && schoolCode.trim() !== '' && schoolCode !== 'all') {
+      url = `/schools/teachers/by-school/?school_code=${encodeURIComponent(schoolCode.trim().toUpperCase())}`;
+    }
+    
+    console.log('[teacherService] Request URL:', url);
+    
+    const response = await schoolApi.get(url);
+    console.log('[teacherService] Response:', response.data);
     return response.data;
   },
 
@@ -441,9 +450,8 @@ export const teacherService = {
     return response.data;
   },
 };
-
 // ============================================
-// SUBJECT SERVICES
+// SUBJECT SERVICES - UPDATED
 // ============================================
 
 export const subjectService = {
@@ -529,6 +537,38 @@ export const subjectService = {
   },
 
   /**
+   * Get subjects by school code
+   * @param schoolCode - School code
+   * @param params - Additional filters
+   */
+  getSubjectsBySchoolCode: async (schoolCode: string, params?: any) => {
+    const response = await schoolApi.get('/schools/subjects/', {
+      params: { ...params, school_code: schoolCode }
+    });
+    return response.data;
+  },
+
+  /**
+   * Get subjects grouped by school
+   * GET /api/schools/subjects/by-school/
+   * GET /api/schools/subjects/by-school/?school_code=AY8NH
+   * @param schoolCode - Optional school code to filter by
+   */
+  getSubjectsGroupedBySchool: async (schoolCode?: string) => {
+    let url = '/schools/subjects/by-school/';
+    
+    if (schoolCode && schoolCode.trim() !== '' && schoolCode !== 'all') {
+      url = `/schools/subjects/by-school/?school_code=${encodeURIComponent(schoolCode.trim().toUpperCase())}`;
+    }
+    
+    console.log('[subjectService] Request URL:', url);
+    
+    const response = await schoolApi.get(url);
+    console.log('[subjectService] Response:', response.data);
+    return response.data;
+  },
+
+  /**
    * Search subjects by query
    * @param query - Search term
    * @param params - Additional filters
@@ -540,9 +580,12 @@ export const subjectService = {
     return response.data;
   },
 };
-
 // ============================================
 // TERM SERVICES
+// ============================================
+
+// ============================================
+// TERM SERVICES - UPDATED WITH FULL CRUD
 // ============================================
 
 export const termService = {
@@ -576,13 +619,11 @@ export const termService = {
   },
 
   /**
-   * Get the current academic term for a school
-   * @param schoolId - School ID
+   * Get a single term by ID
+   * @param id - Term ID
    */
-  getCurrentTerm: async (schoolId: string) => {
-    const response = await schoolApi.get('/schools/terms/', {
-      params: { school: schoolId, is_current: true }
-    });
+  getTerm: async (id: number) => {
+    const response = await schoolApi.get(`/schools/terms/${id}/`);
     return response.data;
   },
 
@@ -604,16 +645,346 @@ export const termService = {
     const response = await schoolApi.delete(`/schools/terms/${id}/`);
     return response.data;
   },
+
+  /**
+   * Get the current academic term for a school
+   * @param schoolId - School ID
+   */
+  getCurrentTerm: async (schoolId: string) => {
+    const response = await schoolApi.get('/schools/terms/', {
+      params: { school: schoolId, is_current: true }
+    });
+    return response.data;
+  },
 };
 
 // ============================================
-// RESULT SERVICES
+// THE  FINALIZATION  OF  MY   JOB
+// ============================================
+
+
+// Add to schoolApi.ts
+
+// ============================================
+// SUBSCRIPTION SERVICES
+// ============================================
+
+export const subscriptionService = {
+  /**
+   * Get all plans
+   */
+  getPlans: async () => {
+    const response = await schoolApi.get('/subscriptions/plans/');
+    return response.data;
+  },
+
+  /**
+   * Get a plan by ID
+   */
+  getPlan: async (id: number) => {
+    const response = await schoolApi.get(`/subscriptions/plans/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Get subscriptions
+   */
+  getSubscriptions: async (params?: any) => {
+    const response = await schoolApi.get('/subscriptions/', { params });
+    return response.data;
+  },
+
+  /**
+   * Create subscription
+   */
+  createSubscription: async (data: any) => {
+    const response = await schoolApi.post('/subscriptions/create/', data);
+    return response.data;
+  },
+
+  /**
+   * Get subscription by ID
+   */
+  getSubscription: async (id: number) => {
+    const response = await schoolApi.get(`/subscriptions/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Update subscription
+   */
+  updateSubscription: async (id: number, data: any) => {
+    const response = await schoolApi.put(`/subscriptions/${id}/`, data);
+    return response.data;
+  },
+
+  /**
+   * Check expiry for a school
+   */
+  checkExpiry: async (schoolCode: string) => {
+    const response = await schoolApi.get('/subscriptions/check-expiry/', {
+      params: { school_code: schoolCode }
+    });
+    return response.data;
+  },
+
+  /**
+   * Get payments
+   */
+  getPayments: async (params?: any) => {
+    const response = await schoolApi.get('/subscriptions/payments/', { params });
+    return response.data;
+  },
+
+  /**
+   * Create payment
+   */
+  createPayment: async (data: any) => {
+    const response = await schoolApi.post('/subscriptions/payments/create/', data);
+    return response.data;
+  },
+
+  /**
+   * Get invoices
+   */
+  getInvoices: async (params?: any) => {
+    const response = await schoolApi.get('/subscriptions/invoices/', { params });
+    return response.data;
+  },
+};
+
+// ============================================
+// SYSTEM SERVICES
+// ============================================
+
+export const systemService = {
+  /**
+   * Get system settings
+   */
+  getSettings: async (params?: any) => {
+    const response = await schoolApi.get('/system/settings/', { params });
+    return response.data;
+  },
+
+  /**
+   * Update system setting
+   */
+  updateSetting: async (id: number, data: any) => {
+    const response = await schoolApi.put(`/system/settings/${id}/`, data);
+    return response.data;
+  },
+
+  /**
+   * Bulk update settings
+   */
+  bulkUpdateSettings: async (settings: any[]) => {
+    const response = await schoolApi.post('/system/settings/bulk-update/', { settings });
+    return response.data;
+  },
+
+  /**
+   * Get activity logs
+   */
+  getActivities: async (params?: any) => {
+    const response = await schoolApi.get('/system/activities/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get system alerts
+   */
+  getAlerts: async (params?: any) => {
+    const response = await schoolApi.get('/system/alerts/', { params });
+    return response.data;
+  },
+
+  /**
+   * Resolve alert
+   */
+  resolveAlert: async (id: number) => {
+    const response = await schoolApi.post(`/system/alerts/${id}/resolve/`);
+    return response.data;
+  },
+
+  /**
+   * Get feature flags
+   */
+  getFeatures: async (params?: any) => {
+    const response = await schoolApi.get('/system/features/', { params });
+    return response.data;
+  },
+};
+
+// ============================================
+// NOTIFICATION SERVICES
+// ============================================
+
+export const notificationService = {
+  /**
+   * Get notifications
+   */
+  getNotifications: async (params?: any) => {
+    const response = await schoolApi.get('/notifications/', { params });
+    return response.data;
+  },
+
+  /**
+   * Create notification
+   */
+  createNotification: async (data: any) => {
+    const response = await schoolApi.post('/notifications/create/', data);
+    return response.data;
+  },
+
+  /**
+   * Get notification by ID
+   */
+  getNotification: async (id: number) => {
+    const response = await schoolApi.get(`/notifications/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Delete notification
+   */
+  deleteNotification: async (id: number) => {
+    const response = await schoolApi.delete(`/notifications/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Mark notifications as read
+   */
+  markAsRead: async (notificationIds?: number[], markAll?: boolean) => {
+    const response = await schoolApi.post('/notifications/mark-read/', {
+      notification_ids: notificationIds,
+      mark_all: markAll
+    });
+    return response.data;
+  },
+
+  /**
+   * Get notification preferences
+   */
+  getPreferences: async () => {
+    const response = await schoolApi.get('/notifications/preferences/');
+    return response.data;
+  },
+
+  /**
+   * Update notification preferences
+   */
+  updatePreferences: async (data: any) => {
+    const response = await schoolApi.put('/notifications/preferences/', data);
+    return response.data;
+  },
+
+  /**
+   * Get notification templates
+   */
+  getTemplates: async () => {
+    const response = await schoolApi.get('/notifications/templates/');
+    return response.data;
+  },
+};
+
+
+
+
+
+// ============================================
+// TESLA / PAYMENT SERVICES
+// ============================================
+
+export const paymentService = {
+  /**
+   * Get all Tesla transactions
+   */
+  getTransactions: async (params?: any) => {
+    const response = await schoolApi.get('/payments/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get a single Tesla transaction by ID
+   */
+  getTransaction: async (id: number) => {
+    const response = await schoolApi.get(`/payments/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Create a new Tesla transaction
+   */
+  createTransaction: async (data: any) => {
+    const response = await schoolApi.post('/payments/create/', data);
+    return response.data;
+  },
+
+  /**
+   * Update a Tesla transaction
+   */
+  updateTransaction: async (id: number, data: any) => {
+    const response = await schoolApi.put(`/payments/${id}/update/`, data);
+    return response.data;
+  },
+
+  /**
+   * Delete a Tesla transaction
+   */
+  deleteTransaction: async (id: number) => {
+    const response = await schoolApi.delete(`/payments/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Process a Tesla transaction
+   */
+  processTransaction: async (id: number, action: string, data?: any) => {
+    const response = await schoolApi.post(`/payments/${id}/process/`, {
+      action,
+      ...data
+    });
+    return response.data;
+  },
+
+  /**
+   * Get Tesla transaction statistics
+   */
+  getTransactionStats: async (params?: any) => {
+    const response = await schoolApi.get('/payments/stats/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get Tesla transactions by school
+   */
+  getTransactionsBySchool: async (schoolCode: string) => {
+    const response = await schoolApi.get(`/payments/school/${schoolCode}/`);
+    return response.data;
+  },
+};
+
+
+
+// ============================================
+// RESULT SERVICES - IMPROVED WITH school_code
 // ============================================
 
 export const resultService = {
   /**
    * Get all results with optional filters
-   * @param params - Filter parameters (student, subject, term, etc.)
+   * @param params - Filter parameters (student, subject, term, school_code, etc.)
+   * 
+   * @example
+   * // Get results for a school
+   * getResults({ school_code: 'AY8NH' })
+   * 
+   * // Get results for a student
+   * getResults({ student: 1, term: 1 })
+   * 
+   * // Get results for a specific class
+   * getResults({ school_code: 'AY8NH', student_class: 'Form 3' })
    */
   getResults: async (params?: any) => {
     const response = await schoolApi.get('/results/', { params });
@@ -661,10 +1032,12 @@ export const resultService = {
    * Get results by student
    * @param studentId - Student ID
    * @param termId - Optional term ID
+   * @param schoolCode - Optional school code
    */
-  getResultsByStudent: async (studentId: number, termId?: number) => {
+  getResultsByStudent: async (studentId: number, termId?: number, schoolCode?: string) => {
     const params: any = { student: studentId };
     if (termId) params.term = termId;
+    if (schoolCode) params.school_code = schoolCode;
     const response = await schoolApi.get('/results/', { params });
     return response.data;
   },
@@ -673,10 +1046,12 @@ export const resultService = {
    * Get results by subject
    * @param subjectId - Subject ID
    * @param termId - Optional term ID
+   * @param schoolCode - Optional school code
    */
-  getResultsBySubject: async (subjectId: number, termId?: number) => {
+  getResultsBySubject: async (subjectId: number, termId?: number, schoolCode?: string) => {
     const params: any = { subject: subjectId };
     if (termId) params.term = termId;
+    if (schoolCode) params.school_code = schoolCode;
     const response = await schoolApi.get('/results/', { params });
     return response.data;
   },
@@ -694,6 +1069,53 @@ export const resultService = {
   },
 
   /**
+   * Get results by school code
+   * @param schoolCode - School code
+   * @param params - Additional filters
+   */
+  getResultsBySchoolCode: async (schoolCode: string, params?: any) => {
+    const response = await schoolApi.get('/results/', {
+      params: { ...params, school_code: schoolCode }
+    });
+    return response.data;
+  },
+
+  /**
+   * Get results grouped by school
+   * GET /api/results/by-school/?school_code=AY8NH
+   * GET /api/results/by-school/?school_code=AY8NH&term=1
+   * @param schoolCode - School code
+   * @param termId - Optional term ID
+   */
+  getResultsBySchoolGrouped: async (schoolCode: string, termId?: number) => {
+    const params: any = { school_code: schoolCode };
+    if (termId) params.term = termId;
+    const response = await schoolApi.get('/results/by-school/', { params });
+    return response.data;
+  },
+
+  /**
+   * Get result statistics
+   * GET /api/results/stats/?school_code=AY8NH
+   * GET /api/results/stats/?school_code=AY8NH&term=1
+   */
+  getResultStats: async (params?: any) => {
+    const response = await schoolApi.get('/results/stats/', { params });
+    return response.data;
+  },
+
+  /**
+   * Search results
+   * GET /api/results/search/?q=john&school_code=AY8NH
+   */
+  searchResults: async (query: string, params?: any) => {
+    const response = await schoolApi.get('/results/search/', {
+      params: { ...params, q: query }
+    });
+    return response.data;
+  },
+
+  /**
    * Bulk create results
    * @param data - Array of result data
    */
@@ -703,10 +1125,14 @@ export const resultService = {
   },
 
   /**
-   * Publish results for a student in a term
-   * @param data - Student ID and Term ID
+   * Publish results
+   * @param data - Student ID, Term ID, and optional school_code
    */
-  publishResults: async (data: { student_id: number; term_id: number }) => {
+  publishResults: async (data: { 
+    student_id?: number; 
+    term_id: number; 
+    school_code?: string;
+  }) => {
     const response = await schoolApi.post('/results/publish/', data);
     return response.data;
   },
@@ -722,14 +1148,13 @@ export const resultService = {
 
   /**
    * Get result summaries
-   * @param params - Filter parameters
+   * @param params - Filter parameters (student, term, school_code, etc.)
    */
   getResultSummaries: async (params?: any) => {
     const response = await schoolApi.get('/results/summaries/', { params });
     return response.data;
   },
 };
-
 // ============================================
 // AUTH SERVICES (Direct API calls without interceptor)
 // ============================================

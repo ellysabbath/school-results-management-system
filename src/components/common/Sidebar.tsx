@@ -26,7 +26,10 @@ import {
   Key,
   Activity,
   Award,
-  TrendingUp
+  TrendingUp,
+  BookCopy,
+  Plane,
+  DollarSign
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 
@@ -89,6 +92,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       icon: Server,
       section: 'System Admin'
     },
+        { 
+      path: '/manage-payments', 
+      label: 'payments', 
+      icon: DollarSign,
+      section: 'System Admin'
+    },
+
+            { 
+      path: '/manage-plans', 
+      label: 'plans', 
+      icon: Plane,
+      section: 'System Admin'
+    },
     
     // School Admin Section
     { 
@@ -119,6 +135,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       path: '/results', 
       label: 'Results', 
       icon: ClipboardList,
+      section: 'School Admin'
+    },
+       { 
+      path: '/terms', 
+      label: 'terms', 
+      icon: Calendar,
+      section: 'School Admin'
+    },
+       { 
+      path: '/view-results', 
+      label: 'view results', 
+      icon: BookCopy,
       section: 'School Admin'
     },
     
@@ -285,7 +313,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
               <p className="text-lg font-bold">Premium</p>
               <p className="text-xs opacity-75">30 days remaining</p>
               <Link
-                to="/billing"
+                to="/subscription"
                 className="mt-2 inline-block bg-white text-blue-700 text-xs px-3 py-1 rounded hover:bg-gray-100 transition"
               >
                 <CreditCard className="w-3 h-3 inline mr-1" />

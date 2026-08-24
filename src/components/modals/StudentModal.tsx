@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Mail, Phone, Calendar, Building2, 
   Loader2, AlertCircle, BookOpen, Hash, School,
-  Users, Shield
+  Users
 } from 'lucide-react';
 import { studentService, schoolService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +24,8 @@ interface Student {
   enrollment_date: string;
   is_active?: boolean;
   school?: number;
+  school_code?: string;
+  school_name?: string;
 }
 
 interface SchoolData {
@@ -56,11 +58,11 @@ const StudentModal: React.FC<StudentModalProps> = ({
   mode,
   schoolId
 }) => {
-  const { user } = useAuth();
+  const { user, school } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
-  // School state - auto-loaded from user
+  // School state
   const [selectedSchool, setSelectedSchool] = useState<SchoolData | null>(null);
   const [isLoadingSchool, setIsLoadingSchool] = useState(false);
 
@@ -81,17 +83,95 @@ const StudentModal: React.FC<StudentModalProps> = ({
     school: schoolId || 1,
   });
 
-  const userRole = user?.role || '';
-  const userEmail = user?.email || '';
-  const userSchoolCode = user?.school_id || user?.schoolId || user?.school?.id || null;
+  // Get school code from user or context
+  const userSchoolCode = school?.school_code || user?.school_id || null;
 
-  // Auto-load school on modal open
+  // Load school function
+  const loadSchool = async (schoolIdToLoad?: number, schoolCodeToLoad?: string) => {
+    setIsLoadingSchool(true);
+    try {
+      let schoolData = null;
+
+      // First try: Use schoolId from props or student
+      const targetSchoolId = schoolIdToLoad || schoolId || student?.school;
+      
+      if (targetSchoolId) {
+        try {
+          const response = await schoolService.getSchool(targetSchoolId);
+          if (response && (response.status === 'success' || response.id)) {
+            schoolData = response.data || response;
+          }
+        } catch (err) {
+          console.log('Could not load school by ID:', err);
+        }
+      }
+
+      // Second try: Use school_code from student or user
+      if (!schoolData) {
+        const targetSchoolCode = schoolCodeToLoad || student?.school_code || userSchoolCode;
+        
+        if (targetSchoolCode) {
+          try {
+            const response = await schoolService.getSchools({ 
+              school_code: targetSchoolCode,
+              page_size: 1
+            });
+            const results = response.results || response;
+            if (results && results.length > 0) {
+              schoolData = results[0];
+            }
+          } catch (err) {
+            console.log('Could not load school by code:', err);
+          }
+        }
+      }
+
+      // Third try: Use school from context
+      if (!schoolData && school?.id) {
+        try {
+          const response = await schoolService.getSchool(school.id);
+          if (response && (response.status === 'success' || response.id)) {
+            schoolData = response.data || response;
+          }
+        } catch (err) {
+          console.log('Could not load school from context:', err);
+        }
+      }
+
+      if (schoolData) {
+        setSelectedSchool(schoolData);
+        setFormData(prev => ({ ...prev, school: schoolData.id }));
+        console.log('[StudentModal] School loaded:', schoolData);
+      } else {
+        console.warn('[StudentModal] No school found');
+        // Don't show error for edit mode if student has school
+        if (mode === 'add') {
+          toast.error('No school found. Please contact administrator.');
+        }
+      }
+    } catch (error) {
+      console.error('[StudentModal] Failed to load school:', error);
+      if (mode === 'add') {
+        toast.error('Failed to load school information');
+      }
+    } finally {
+      setIsLoadingSchool(false);
+    }
+  };
+
+  // Load school on modal open
   useEffect(() => {
     if (isOpen) {
-      loadSchool();
+      // For edit mode, try to load school from student data first
+      if (mode === 'edit' && student) {
+        loadSchool(student.school, student.school_code);
+      } else {
+        loadSchool(schoolId, userSchoolCode);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, mode, student]);
 
+  // Set form data when student changes
   useEffect(() => {
     if (student && mode === 'edit') {
       setFormData({
@@ -111,7 +191,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
         is_active: student.is_active !== undefined ? student.is_active : true,
         school: student.school || schoolId || 1,
       });
-    } else {
+    } else if (mode === 'add') {
       setFormData({
         admission_number: '',
         first_name: '',
@@ -130,57 +210,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
       });
     }
     setErrors({});
-  }, [student, mode, isOpen, schoolId]);
-
-  // Load school by school_id or auto-detect
-  const loadSchool = async () => {
-    setIsLoadingSchool(true);
-    try {
-      let school = null;
-
-      // If schoolId is provided, use it
-      if (schoolId) {
-        const response = await schoolService.getSchool(schoolId);
-        if (response.status === 'success' || response.data) {
-          school = response.data || response;
-        }
-      } 
-      // Try by school_code from user
-      else if (userSchoolCode) {
-        const response = await schoolService.getSchools({ 
-          school_code: userSchoolCode,
-          page_size: 1
-        });
-        const results = response.results || response;
-        if (results && results.length > 0) {
-          school = results[0];
-        }
-      }
-      // Try by admin email
-      else if (userEmail) {
-        const response = await schoolService.getSchools({ 
-          admin_email: userEmail,
-          page_size: 1
-        });
-        const results = response.results || response;
-        if (results && results.length > 0) {
-          school = results[0];
-        }
-      }
-
-      if (school) {
-        setSelectedSchool(school);
-        setFormData(prev => ({ ...prev, school: school.id }));
-      } else {
-        toast.warning('No school found for your account. Please contact administrator.');
-      }
-    } catch (error) {
-      console.error('Failed to load school:', error);
-      toast.error('Failed to load school information');
-    } finally {
-      setIsLoadingSchool(false);
-    }
-  };
+  }, [student, mode, schoolId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -267,12 +297,11 @@ const StudentModal: React.FC<StudentModalProps> = ({
         school: formData.school,
       };
 
-      let response;
       if (mode === 'edit' && student?.id) {
-        response = await studentService.updateStudent(student.id, apiData);
+        await studentService.updateStudent(student.id, apiData);
         toast.success('Student updated successfully!');
       } else {
-        response = await studentService.createStudent(apiData);
+        await studentService.createStudent(apiData);
         toast.success('Student added successfully!');
       }
 
@@ -317,10 +346,16 @@ const StudentModal: React.FC<StudentModalProps> = ({
             <p className="text-sm text-secondary-500">
               {mode === 'add' ? 'Enter student details to add to the system' : 'Update student information'}
             </p>
-            {userRole === 'school_admin' && (
+            {selectedSchool?.school_code && (
               <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                School Admin
+                <School className="w-3 h-3" />
+                School: {selectedSchool.name} ({selectedSchool.school_code})
+              </p>
+            )}
+            {student?.school_code && !selectedSchool && (
+              <p className="text-xs text-secondary-500 mt-1 flex items-center gap-1">
+                <School className="w-3 h-3" />
+                School Code: {student.school_code}
               </p>
             )}
           </div>
@@ -375,6 +410,16 @@ const StudentModal: React.FC<StudentModalProps> = ({
                   </div>
                 </div>
               </div>
+            ) : student?.school_code ? (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <School className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-blue-700">School Code: {student.school_code}</p>
+                    <p className="text-xs text-blue-600">School information will be loaded when you save</p>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex items-center gap-3">
@@ -409,18 +454,19 @@ const StudentModal: React.FC<StudentModalProps> = ({
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
                   Admission Number <span className="text-secondary-400 text-xs">(Optional)</span>
                 </label>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                  <input
-                    type="text"
-                    name="admission_number"
-                    value={formData.admission_number}
-                    onChange={handleChange}
-                    placeholder="GV-2026-001"
-                    className={`input-field pl-10 ${errors.admission_number ? 'border-red-500 focus:ring-red-500' : ''}`}
-                    disabled={isLoading}
-                  />
-                </div>
+
+<div className="relative">
+  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+  <input
+    type="text"
+    name="admission_number"
+    value={formData.admission_number}
+    onChange={handleChange}
+    placeholder="AY8NH-0001"
+    className={`input-field pl-10 bg-gray-50 cursor-not-allowed ${errors.admission_number ? 'border-red-500 focus:ring-red-500' : ''}`}
+    disabled={true}
+  />
+</div>
                 {errors.admission_number && (
                   <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
@@ -442,7 +488,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
                     name="student_class"
                     value={formData.student_class}
                     onChange={handleChange}
-                    placeholder="Grade 10A"
+                    placeholder="Form Three"
                     className={`input-field pl-10 ${errors.student_class ? 'border-red-500 focus:ring-red-500' : ''}`}
                     disabled={isLoading}
                   />
@@ -517,7 +563,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    placeholder="john.doe@school.edu"
+                    placeholder="john.doe@email.com"
                     className={`input-field pl-10 ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
                     disabled={isLoading}
                   />
