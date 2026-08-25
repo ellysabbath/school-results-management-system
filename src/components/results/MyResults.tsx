@@ -38,7 +38,7 @@ interface Result {
   id: number;
   student: number;
   subject: number;
-  term: number;  // Added missing term property
+  term: number;
   marks_obtained: number;
   total_marks: number;
   percentage: number;
@@ -268,8 +268,8 @@ const MyResults: React.FC = () => {
             }
             setTerms(termData);
             
-            // Auto-select first term
-            if (termData.length > 0 && !selectedTerm) {
+            // Auto-select first term - only if not already selected
+            if (termData.length > 0 && selectedTerm === null) {
               const currentTerm = termData.find(t => t.is_current);
               setSelectedTerm(currentTerm ? currentTerm.id : termData[0].id);
             }
@@ -322,7 +322,7 @@ const MyResults: React.FC = () => {
       setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [isAuthenticated, user, userEmail, userSchoolId, userSchoolCode, school, userName, selectedTerm, terms]);
+  }, [isAuthenticated, user, userEmail, userSchoolId, userSchoolCode, school, userName, selectedTerm]);
 
   // ============================================
   // AUTO-LOAD ON PAGE LOAD
@@ -334,7 +334,7 @@ const MyResults: React.FC = () => {
     } else {
       setIsInitialLoading(false);
     }
-  }, [isAuthenticated, user, fetchStudentResults]);
+  }, [isAuthenticated, user]); // Remove fetchStudentResults from deps to prevent loop
 
   // ============================================
   // FILTER RESULTS
