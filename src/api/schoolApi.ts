@@ -16,7 +16,7 @@ const schoolApi = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 3000000000,
+  timeout: 500000,
 });
 
 // ============================================
