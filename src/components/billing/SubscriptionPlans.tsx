@@ -6,7 +6,8 @@ import {
   DollarSign, Users, BookOpen, Award, Shield, 
   Calendar, Clock, AlertCircle, ChevronLeft, ChevronRight,
   Eye, FileText, Printer, Download, Hash, Mail, Phone,
-  Building2, Smartphone, Tag, Filter, User, Upload
+  Building2, Smartphone, Tag, Filter, User, Upload,
+  CheckCircle2, XCircle, Wallet, Receipt
 } from 'lucide-react';
 import { paymentService, subscriptionService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
@@ -26,6 +27,7 @@ interface Transaction {
   plan_price: number;
   currency: string;
   amount: number;
+  formatted_amount?: string;
   payment_method: string;
   telecom_provider: string;
   transaction_reference: string;
@@ -109,6 +111,8 @@ const SubscriptionPlans: React.FC = () => {
     completedCount: 0,
     pendingCount: 0,
     failedCount: 0,
+    processingCount: 0,
+    totalAmount: 0,
   });
 
   // Fetch transactions
@@ -118,28 +122,58 @@ const SubscriptionPlans: React.FC = () => {
       const response = await paymentService.getTransactions({ page_size: 100 });
       console.log('[SubscriptionPlans] Transactions response:', response);
       
-      let transactionData = [];
+      let transactionData: Transaction[] = [];
       if (response.results) {
         transactionData = response.results;
       } else if (Array.isArray(response)) {
         transactionData = response;
       }
       
+      // Ensure amount is a number
+      transactionData = transactionData.map(t => ({
+        ...t,
+        amount: typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount,
+        plan_price: typeof t.plan_price === 'string' ? parseFloat(t.plan_price) : t.plan_price,
+      }));
+      
       setTransactions(transactionData);
       setFilteredTransactions(transactionData);
       
       // Calculate stats
       const completed = transactionData.filter((t: Transaction) => t.status === 'completed');
-      const pending = transactionData.filter((t: Transaction) => t.status === 'pending' || t.status === 'processing');
+      const pending = transactionData.filter((t: Transaction) => t.status === 'pending');
+      const processing = transactionData.filter((t: Transaction) => t.status === 'processing');
       const failed = transactionData.filter((t: Transaction) => t.status === 'failed');
       
+      const totalSpent = completed.reduce((acc: number, t: Transaction) => {
+        const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
+      const pendingAmount = pending.reduce((acc: number, t: Transaction) => {
+        const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
+      const processingAmount = processing.reduce((acc: number, t: Transaction) => {
+        const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
+      const totalAmount = transactionData.reduce((acc: number, t: Transaction) => {
+        const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
       setStats({
-        totalSpent: completed.reduce((acc: number, t: Transaction) => acc + t.amount, 0),
+        totalSpent: totalSpent,
         totalTransactions: transactionData.length,
-        pendingAmount: pending.reduce((acc: number, t: Transaction) => acc + t.amount, 0),
+        pendingAmount: pendingAmount + processingAmount,
         completedCount: completed.length,
-        pendingCount: pending.length,
+        pendingCount: pending.length + processing.length,
         failedCount: failed.length,
+        processingCount: processing.length,
+        totalAmount: totalAmount,
       });
     } catch (error: any) {
       console.error('[SubscriptionPlans] Failed to fetch transactions:', error);
@@ -407,6 +441,9 @@ const SubscriptionPlans: React.FC = () => {
   };
 
   const formatCurrency = (amount: number): string => {
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      return 'TZS 0';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'TZS',
@@ -428,15 +465,15 @@ const SubscriptionPlans: React.FC = () => {
   const getStatusIcon = (status: string) => {
     switch(status) {
       case 'completed':
-        return <Check className="w-4 h-4 text-green-600" />;
+        return <CheckCircle2 className="w-4 h-4 text-green-600" />;
       case 'pending':
         return <Clock className="w-4 h-4 text-yellow-600" />;
       case 'processing':
         return <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />;
       case 'failed':
-        return <AlertCircle className="w-4 h-4 text-red-600" />;
+        return <XCircle className="w-4 h-4 text-red-600" />;
       case 'cancelled':
-        return <AlertCircle className="w-4 h-4 text-gray-600" />;
+        return <XCircle className="w-4 h-4 text-gray-600" />;
       default:
         return <Clock className="w-4 h-4 text-gray-400" />;
     }
@@ -445,17 +482,17 @@ const SubscriptionPlans: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'completed':
-        return 'bg-green-50 text-green-600';
+        return 'bg-green-50 text-green-700 border-green-200';
       case 'pending':
-        return 'bg-yellow-50 text-yellow-600';
+        return 'bg-yellow-50 text-yellow-700 border-yellow-200';
       case 'processing':
-        return 'bg-blue-50 text-blue-600';
+        return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'failed':
-        return 'bg-red-50 text-red-600';
+        return 'bg-red-50 text-red-700 border-red-200';
       case 'cancelled':
-        return 'bg-gray-50 text-gray-600';
+        return 'bg-gray-50 text-gray-700 border-gray-200';
       default:
-        return 'bg-secondary-50 text-secondary-600';
+        return 'bg-secondary-50 text-secondary-700 border-secondary-200';
     }
   };
 
@@ -474,6 +511,11 @@ const SubscriptionPlans: React.FC = () => {
       default:
         return status.charAt(0).toUpperCase() + status.slice(1);
     }
+  };
+
+  const getMethodDisplay = (method: string): string => {
+    if (!method) return 'N/A';
+    return method.charAt(0).toUpperCase() + method.slice(1);
   };
 
   const paymentMethods = ['all', ...new Set(transactions.map(t => t.payment_method).filter(Boolean))];
@@ -528,33 +570,48 @@ const SubscriptionPlans: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Total Spent</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Wallet className="w-4 h-4 text-green-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Spent</p>
+          </div>
           <p className="text-lg font-bold text-secondary-900">
             {formatCurrency(stats.totalSpent)}
           </p>
+          <p className="text-xs text-secondary-400">{stats.completedCount} completed transactions</p>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Total Transactions</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Receipt className="w-4 h-4 text-blue-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Transactions</p>
+          </div>
           <p className="text-lg font-bold text-secondary-900">
             {stats.totalTransactions}
           </p>
-          <div className="flex gap-2 text-xs mt-1">
+          <div className="flex gap-2 text-xs mt-1 flex-wrap">
             <span className="text-green-600">{stats.completedCount} Completed</span>
             <span className="text-yellow-600">{stats.pendingCount} Pending</span>
             <span className="text-red-600">{stats.failedCount} Failed</span>
           </div>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Pending Amount</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-yellow-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Pending Amount</p>
+          </div>
           <p className="text-lg font-bold text-yellow-600">
             {formatCurrency(stats.pendingAmount)}
           </p>
+          <p className="text-xs text-secondary-400">{stats.pendingCount} pending transactions</p>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Average Transaction</p>
-          <p className="text-lg font-bold text-secondary-900">
-            {stats.totalTransactions > 0 ? formatCurrency(stats.totalSpent / stats.totalTransactions) : formatCurrency(0)}
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-4 h-4 text-purple-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Amount</p>
+          </div>
+          <p className="text-lg font-bold text-purple-600">
+            {formatCurrency(stats.totalAmount)}
           </p>
+          <p className="text-xs text-secondary-400">Across all transactions</p>
         </div>
       </div>
 
@@ -589,7 +646,7 @@ const SubscriptionPlans: React.FC = () => {
           >
             {paymentMethods.map(method => (
               <option key={method} value={method}>
-                {method === 'all' ? 'All Methods' : method.charAt(0).toUpperCase() + method.slice(1)}
+                {method === 'all' ? 'All Methods' : getMethodDisplay(method)}
               </option>
             ))}
           </select>
@@ -657,17 +714,21 @@ const SubscriptionPlans: React.FC = () => {
                           <p className="text-xs text-secondary-400">{transaction.school_code || 'N/A'}</p>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm font-medium text-secondary-900">
-                        {formatCurrency(transaction.amount)}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-secondary-600">
-                        {transaction.plan_name || 'N/A'}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-secondary-600">
-                        {transaction.payment_method?.charAt(0).toUpperCase() + transaction.payment_method?.slice(1) || 'N/A'}
+                      <td className="py-3 px-4">
+                        <span className="text-sm font-medium text-secondary-900">
+                          {transaction.formatted_amount || formatCurrency(transaction.amount)}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(transaction.status)}`}>
+                        <span className="text-sm text-secondary-600 capitalize">
+                          {transaction.plan_name || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-secondary-600">
+                        {getMethodDisplay(transaction.payment_method)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(transaction.status)}`}>
                           {getStatusIcon(transaction.status)}
                           {getStatusLabel(transaction.status)}
                         </span>
@@ -676,7 +737,7 @@ const SubscriptionPlans: React.FC = () => {
                         {formatDate(transaction.created_at)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openViewModal(transaction)}
                             className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
@@ -893,8 +954,8 @@ const SubscriptionPlans: React.FC = () => {
                     }`}
                     disabled={isProcessing}
                   >
-                    <option value="starter">Basic</option>
-                    <option value="professional">Premium</option>
+                    <option value="starter">Starter</option>
+                    <option value="professional">Professional</option>
                     <option value="enterprise">Enterprise</option>
                     <option value="trial">Trial</option>
                   </select>
@@ -954,7 +1015,7 @@ const SubscriptionPlans: React.FC = () => {
                 </div>
               </div>
 
-              {/* Status - Added for editing */}
+              {/* Status */}
               <div>
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
                   Status <span className="text-red-500">*</span>
@@ -1163,19 +1224,21 @@ const SubscriptionPlans: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Amount</p>
-                    <p className="text-xl font-bold text-primary-600">{formatCurrency(viewingTransaction.amount)}</p>
+                    <p className="text-xl font-bold text-primary-600">
+                      {viewingTransaction.formatted_amount || formatCurrency(viewingTransaction.amount)}
+                    </p>
                   </div>
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Plan</p>
-                    <p className="font-medium text-secondary-900">{viewingTransaction.plan_name}</p>
+                    <p className="font-medium text-secondary-900 capitalize">{viewingTransaction.plan_name}</p>
                   </div>
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Payment Method</p>
-                    <p className="font-medium text-secondary-900">{viewingTransaction.payment_method?.charAt(0).toUpperCase() + viewingTransaction.payment_method?.slice(1) || 'N/A'}</p>
+                    <p className="font-medium text-secondary-900">{getMethodDisplay(viewingTransaction.payment_method)}</p>
                   </div>
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Telecom Provider</p>
-                    <p className="font-medium text-secondary-900">{viewingTransaction.telecom_provider?.charAt(0).toUpperCase() + viewingTransaction.telecom_provider?.slice(1) || 'N/A'}</p>
+                    <p className="font-medium text-secondary-900">{getMethodDisplay(viewingTransaction.telecom_provider)}</p>
                   </div>
                 </div>
               </div>

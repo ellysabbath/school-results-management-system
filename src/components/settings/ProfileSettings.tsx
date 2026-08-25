@@ -7,7 +7,7 @@ import {
   Building2, Users, BookOpen, FileText,
   ChevronDown, ChevronUp, Copy, Eye, EyeOff,
   LogIn, LogOut, Edit, Trash2, Plus, School,
-  Hash
+  Hash, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { schoolService } from '../../api/schoolApi';
@@ -44,6 +44,7 @@ const ProfileSettings: React.FC = () => {
   const [isLoadingActivities, setIsLoadingActivities] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState('');
+  const [activityError, setActivityError] = useState<string | null>(null);
   
   // School data state
   const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
@@ -138,48 +139,107 @@ const ProfileSettings: React.FC = () => {
     }
   }, [user, fetchSchoolCode]);
 
-  // Fetch activities when component mounts
-  useEffect(() => {
-    fetchActivities();
-  }, []);
+  // ============================================
+  // FETCH ACTIVITIES - FIXED FOR RAW ARRAY RESPONSE
+  // ============================================
 
   const fetchActivities = async () => {
     setIsLoadingActivities(true);
+    setActivityError(null);
+    
     try {
+      console.log('[ProfileSettings] Fetching activity logs...');
       const response = await getActivityLogs();
-      console.log('[ProfileSettings] Activity logs response:', response);
+      console.log('[ProfileSettings] Activity logs raw response:', response);
+      console.log('[ProfileSettings] Response type:', typeof response);
+      console.log('[ProfileSettings] Is array?', Array.isArray(response));
       
-      let activityData = [];
+      let activityData: ActivityLog[] = [];
       
-      if (response && response.status === 'success') {
+      // The Django view returns a raw array of objects (queryset)
+      // Response is directly the array, not wrapped in an object
+      
+      // Check if response is directly an array
+      if (Array.isArray(response)) {
+        activityData = response;
+        console.log('[ProfileSettings] Response is array, length:', activityData.length);
+      } 
+      // Check if response has a data property that is an array
+      else if (response && typeof response === 'object') {
+        // Check common wrapper formats
         if (response.data && Array.isArray(response.data)) {
           activityData = response.data;
+          console.log('[ProfileSettings] Found array in response.data, length:', activityData.length);
         } 
         else if (response.results && Array.isArray(response.results)) {
           activityData = response.results;
+          console.log('[ProfileSettings] Found array in response.results, length:', activityData.length);
         }
-        else if (Array.isArray(response)) {
-          activityData = response;
+        else if (response.status === 'success' && response.data && Array.isArray(response.data)) {
+          activityData = response.data;
+          console.log('[ProfileSettings] Found array in success.data, length:', activityData.length);
         }
-      } 
-      else if (Array.isArray(response)) {
-        activityData = response;
-      }
-      else if (response && response.results && Array.isArray(response.results)) {
-        activityData = response.results;
+        // Check if response itself has array-like properties
+        else {
+          // Try to find any array property
+          let found = false;
+          for (const key of Object.keys(response)) {
+            if (Array.isArray(response[key]) && response[key].length > 0) {
+              // Check if the array contains objects with expected fields
+              if (response[key].length > 0 && typeof response[key][0] === 'object') {
+                activityData = response[key];
+                console.log(`[ProfileSettings] Found array in response.${key}, length:`, activityData.length);
+                found = true;
+                break;
+              }
+            }
+          }
+          
+          // If still no data and response looks like a single object with activity fields
+          if (!found && response.id !== undefined && response.action !== undefined) {
+            activityData = [response];
+            console.log('[ProfileSettings] Response is single activity object, converted to array');
+          }
+        }
       }
       
-      console.log('[ProfileSettings] Processed activities:', activityData);
+      // Ensure each item has the required fields
+      activityData = activityData.filter(item => 
+        item && typeof item === 'object' && item.id !== undefined
+      );
+      
+      console.log('[ProfileSettings] Final processed activities:', activityData);
       setActivities(activityData);
       
-    } catch (error) {
+      if (activityData.length === 0) {
+        console.log('[ProfileSettings] No activities found');
+        // Don't show error for empty activities, just show empty state
+      }
+      
+    } catch (error: any) {
       console.error('[ProfileSettings] Failed to fetch activities:', error);
-      toast.error('Failed to load activity logs');
+      
+      let errorMessage = 'Failed to load activity logs';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setActivityError(errorMessage);
+      toast.error(errorMessage);
       setActivities([]);
     } finally {
       setIsLoadingActivities(false);
     }
   };
+
+  // Fetch activities when component mounts
+  useEffect(() => {
+    fetchActivities();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -272,6 +332,7 @@ const ProfileSettings: React.FC = () => {
           newPassword: '',
           confirmPassword: '',
         }));
+        // Refresh activities after profile update
         fetchActivities();
       }
     } catch (error: any) {
@@ -732,7 +793,7 @@ const ProfileSettings: React.FC = () => {
             </div>
           </div>
 
-          {/* Activity Logs */}
+          {/* Activity Logs - FIXED FOR RAW ARRAY */}
           <div className="bg-white rounded-xl border border-secondary-200 p-6">
             <button
               onClick={() => setShowActivities(!showActivities)}
@@ -761,15 +822,34 @@ const ProfileSettings: React.FC = () => {
 
             {showActivities && (
               <div className="mt-4">
+                {/* Error State */}
+                {activityError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-3">
+                    <div className="flex items-center gap-2 text-red-600 text-sm">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>{activityError}</span>
+                    </div>
+                    <button
+                      onClick={fetchActivities}
+                      className="mt-2 text-xs text-red-600 hover:text-red-700 font-medium flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {/* Loading State */}
                 {isLoadingActivities ? (
                   <div className="flex items-center justify-center py-6">
                     <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
-                    <span className="ml-2 text-sm text-secondary-500">Loading...</span>
+                    <span className="ml-2 text-sm text-secondary-500">Loading activities...</span>
                   </div>
-                ) : activities.length === 0 ? (
+                ) : activities.length === 0 && !activityError ? (
                   <div className="text-center py-6 text-secondary-500">
                     <Activity className="w-8 h-8 mx-auto mb-2 text-secondary-300" />
                     <p className="text-sm">No activity logs found</p>
+                    <p className="text-xs text-secondary-400 mt-1">Your activities will appear here</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -807,17 +887,17 @@ const ProfileSettings: React.FC = () => {
                 
                 <button
                   onClick={fetchActivities}
-                  className="mt-3 w-full text-center text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  disabled={isLoadingActivities}
+                  className="mt-3 w-full text-center text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center justify-center gap-1 disabled:opacity-50"
                 >
-                  Refresh logs
+                  <RefreshCw className={`w-3 h-3 ${isLoadingActivities ? 'animate-spin' : ''}`} />
+                  {isLoadingActivities ? 'Loading...' : 'Refresh logs'}
                 </button>
               </div>
             )}
           </div>
 
-          {/* ==========================================
-              SCHOOL CODE SECTION - SIDEBAR
-              ========================================== */}
+          {/* School Code Section - Sidebar */}
           {isLoadingSchool ? (
             <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex items-center justify-center gap-3">
               <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />

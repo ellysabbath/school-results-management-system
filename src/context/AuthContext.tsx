@@ -176,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchSchoolInfo = async (userData: User): Promise<SchoolInfo | null> => {
     try {
-      const schoolCode = userData.school_id || userData.schoolId;
+      const schoolCode = userData.school_id || userData.school_id;
       
       if (schoolCode) {
         const response = await authAxios.get('/schools/', {
@@ -498,19 +498,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // ============================================
-  // GET ACTIVITY LOGS
+  // GET ACTIVITY LOGS - FIXED
   // ============================================
 
   const getActivityLogs = async () => {
     try {
       const response = await authAxios.get('/accounts/activity-logs/');
-
-      if (response.data.status === 'success') {
-        return response.data;
+      console.log('[AuthContext] Activity logs response:', response);
+      
+      // The Django view returns a raw array directly
+      // Check if response.data is an array
+      if (Array.isArray(response.data)) {
+        console.log('[AuthContext] Response is array, length:', response.data.length);
+        return response.data; // Return the array directly
       }
-
-      throw new Error(response.data.message || 'Failed to get activity logs');
+      
+      // If response.data has a status field, handle it
+      if (response.data && response.data.status === 'success') {
+        // If it's a wrapped response with data
+        if (Array.isArray(response.data.data)) {
+          return response.data.data;
+        }
+        if (Array.isArray(response.data.results)) {
+          return response.data.results;
+        }
+        // If it's a wrapped response but data is not array, return empty array
+        console.warn('[AuthContext] Success response but no array found');
+        return [];
+      }
+      
+      // If response.data has results field
+      if (response.data && Array.isArray(response.data.results)) {
+        return response.data.results;
+      }
+      
+      // If response.data has data field
+      if (response.data && Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+      
+      // If none of the above, return empty array
+      console.warn('[AuthContext] Unexpected response format:', response.data);
+      return [];
+      
     } catch (error) {
+      console.error('[AuthContext] Failed to get activity logs:', error);
       throw error;
     }
   };

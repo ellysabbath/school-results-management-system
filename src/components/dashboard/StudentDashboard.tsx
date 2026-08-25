@@ -536,6 +536,7 @@ const StudentDashboard: React.FC = () => {
           <h1 className="text-2xl font-bold text-secondary-900">
             Welcome back, {studentData?.first_name || user?.first_name || 'Student'}! <CircleCheck className='text-success'/>
           </h1>
+          <h1>My Results</h1>
           <p className="text-secondary-500">
             Here's your academic overview
             {currentTerm && ` for ${currentTerm.name}`}

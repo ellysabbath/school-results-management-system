@@ -30,9 +30,15 @@ import {
   BookCopy,
   Plane,
   DollarSign,
-  Podcast
+  Podcast,
+  Mail,
+  Bell,
+  UserCog,
+  LucideParentheses,
+  
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,83 +47,105 @@ interface SidebarProps {
   isMobile: boolean;
 }
 
+interface NavigationItem {
+  path: string;
+  label: string;
+  icon: React.ComponentType<any>;
+  section: string;
+  roles: string[];
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }) => {
   const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
+
+  // Get user role from auth context
+  const userRole = user?.role || 'guest';
 
   // ============================================
-  // NAVIGATION ITEMS - ALL SECTIONS
+  // NAVIGATION ITEMS WITH ROLE-BASED ACCESS
+  // Matching Django role names: super_admin, school_admin, teacher, student, parent
   // ============================================
-  const navigationItems = [
-    // Authentication Section
+  const navigationItems: NavigationItem[] = [
+    // Public/Auth Section
     { 
       path: '/login', 
       label: 'Login', 
       icon: LogIn,
-      section: 'Account'
+      section: 'Account',
+      roles: ['guest']
     },
     { 
       path: '/register', 
       label: 'Register', 
       icon: UserPlus,
-      section: 'Account'
+      section: 'Account',
+      roles: ['guest']
     },
     { 
       path: '/forgot-password', 
       label: 'Forgot Password', 
       icon: Key,
-      section: 'Account'
+      section: 'Account',
+      roles: ['guest']
     },
     
-    // System Admin Section
+    // Super Admin Section
     { 
       path: '/dashboard', 
       label: 'System Dashboard', 
       icon: Shield,
-      section: 'System Admin'
+      section: 'System Admin',
+      roles: ['super_admin']
     },
-    
     { 
       path: '/system/schools', 
       label: 'All Schools', 
       icon: Building2,
-      section: 'System Admin'
+      section: 'System Admin',
+      roles: ['super_admin']
     },
     { 
       path: '/system/analytics', 
       label: 'System Analytics', 
       icon: PieChart,
-      section: 'System Admin'
+      section: 'System Admin',
+      roles: ['super_admin']
     },
-        { 
+    { 
       path: '/manage-users', 
-      label: 'users operations', 
-      icon: Users,
-      section: 'System Admin'
+      label: 'User Management', 
+      icon: UserCog,
+      section: 'System Admin',
+      roles: ['super_admin']
     },
     { 
       path: '/system/settings', 
       label: 'System Settings', 
       icon: Server,
-      section: 'System Admin'
+      section: 'System Admin',
+      roles: ['super_admin']
     },
-      { 
+    { 
       path: '/manage/mails', 
-      label: 'manage mails', 
-      icon: Podcast,
-      section: 'System Admin'
+      label: 'Manage Mails', 
+      icon: Mail,
+      section: 'System Admin',
+      roles: ['super_admin']
     },
-        { 
-      path: '/billing', 
-      label: 'payments', 
-      icon: DollarSign,
-      section: 'System Admin'
-    },
-
-   { 
+    { 
       path: '/manage-plans', 
-      label: 'manage payments', 
+      label: 'Manage Payments', 
       icon: Plane,
-      section: 'System Admin'
+      section: 'System Admin',
+      roles: ['super_admin']
+    },
+    { 
+      path: '/notifications', 
+      label: 'Notifications', 
+      icon: Bell,
+      section: 'System Admin',
+      roles: ['super_admin', 'school_admin', 'teacher', 'student', 'parent']
     },
     
     // School Admin Section
@@ -125,43 +153,57 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       path: '/admin-dashboard', 
       label: 'School Dashboard', 
       icon: LayoutDashboard,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
     },
     { 
       path: '/students', 
       label: 'Students', 
       icon: Users,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
     },
     { 
       path: '/teachers', 
       label: 'Teachers', 
       icon: UserCheck,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
     },
     { 
       path: '/subjects', 
       label: 'Subjects', 
       icon: BookOpen,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
     },
     { 
       path: '/results', 
-      label: 'Results', 
+      label: 'Results Entry', 
       icon: ClipboardList,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
     },
-       { 
+    { 
       path: '/terms', 
-      label: 'terms', 
+      label: 'Term Manager', 
       icon: Calendar,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
     },
-       { 
+    { 
       path: '/view-results', 
-      label: 'view results', 
+      label: 'View Results', 
       icon: BookCopy,
-      section: 'School Admin'
+      section: 'School Admin',
+      roles: ['school_admin']
+    },
+    { 
+      path: '/billing', 
+      label: 'My Payments', 
+      icon: DollarSign,
+      section: 'School Admin',
+      roles: ['school_admin', 'super_admin']
     },
     
     // Teacher Section
@@ -169,7 +211,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       path: '/teacher-dashboard', 
       label: 'Teacher Dashboard', 
       icon: GraduationCap,
-      section: 'Teacher'
+      section: 'Teacher',
+      roles: ['teacher']
+    },
+    { 
+      path: '/results', 
+      label: 'Results Entry', 
+      icon: ClipboardList,
+      section: 'Teacher',
+      roles: ['teacher']
+    },
+    { 
+      path: '/students', 
+      label: 'Students', 
+      icon: Users,
+      section: 'Teacher',
+      roles: ['teacher']
     },
     
     // Student Section
@@ -177,50 +234,104 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       path: '/student-dashboard', 
       label: 'Student Dashboard', 
       icon: School,
-      section: 'Student'
+      section: 'Student',
+      roles: ['student']
+    },
+    { 
+      path: '/student/my-results', 
+      label: 'My Results', 
+      icon: School,
+      section: 'Student',
+      roles: ['student']
     },
     { 
       path: '/my-results', 
-      label: 'My Results', 
+      label: 'School Results', 
       icon: FileText,
-      section: 'Student'
+      section: 'Student',
+      roles: ['student']
     },
     { 
       path: '/report-card/1', 
       label: 'Report Card', 
       icon: GraduationCap,
-      section: 'Student'
+      section: 'Student',
+      roles: ['student']
     },
     
-    // Common Section
+    // Parent Section
+    { 
+      path: '/parent-dashboard', 
+      label: 'Parent Dashboard', 
+      icon: LucideParentheses,
+      section: 'Parent',
+      roles: ['parent']
+    },
+    { 
+      path: '/my-results', 
+      label: 'View Results', 
+      icon: FileText,
+      section: 'Parent',
+      roles: ['parent']
+    },
+    { 
+      path: '/report-card/1', 
+      label: 'Report Card', 
+      icon: GraduationCap,
+      section: 'Parent',
+      roles: ['parent']
+    },
+    
+    // Common Section (available to all authenticated users)
     { 
       path: '/analytics', 
       label: 'Analytics', 
       icon: BarChart3,
-      section: 'Common'
-    },
-    { 
-      path: '/billing', 
-      label: 'Billing', 
-      icon: CreditCard,
-      section: 'Common'
+      section: 'Common',
+      roles: ['school_admin', 'teacher', 'student', 'super_admin', 'parent']
     },
     { 
       path: '/settings', 
       label: 'Settings', 
       icon: Settings,
-      section: 'Common'
+      section: 'Common',
+      roles: ['school_admin', 'teacher', 'student', 'super_admin', 'parent']
     },
   ];
 
-  // Group menu items by section
-  const groupedMenuItems = navigationItems.reduce((acc, item) => {
-    if (!acc[item.section]) {
-      acc[item.section] = [];
+  // Filter items based on user role and authentication status
+  const getFilteredItems = () => {
+    // If not authenticated, only show public items
+    if (!isAuthenticated) {
+      return navigationItems.filter(item => 
+        item.roles.includes('guest')
+      );
     }
-    acc[item.section].push(item);
-    return acc;
-  }, {} as Record<string, typeof navigationItems>);
+
+    // If authenticated, show items based on user role
+    return navigationItems.filter(item => {
+      // If item has no roles specified, show it to everyone
+      if (!item.roles || item.roles.length === 0) {
+        return true;
+      }
+      // Check if user's role is in the allowed roles
+      return item.roles.includes(userRole);
+    });
+  };
+
+  // Group menu items by section
+  const groupMenuItems = (items: NavigationItem[]) => {
+    return items.reduce((acc, item) => {
+      if (!acc[item.section]) {
+        acc[item.section] = [];
+      }
+      acc[item.section].push(item);
+      return acc;
+    }, {} as Record<string, NavigationItem[]>);
+  };
+
+  const filteredItems = getFilteredItems();
+  const groupedMenuItems = groupMenuItems(filteredItems);
 
   // Check if a path is active
   const isPathActive = (path: string) => {
@@ -230,8 +341,67 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
     if (path === '/report-card/1') {
       return location.pathname.startsWith('/report-card');
     }
+    if (path === '/students' && location.pathname.startsWith('/students/')) {
+      return true;
+    }
     return location.pathname === path || location.pathname.startsWith(path);
   };
+
+  // If not authenticated and no public items, show a message
+  if (!isAuthenticated && filteredItems.length === 0) {
+    return (
+      <>
+        {isMobile && isOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={onClose}
+          />
+        )}
+        <aside className={`
+          fixed top-0 left-0 z-50 h-full bg-white border-r border-gray-200 shadow-lg transition-all duration-300
+          ${isOpen ? 'translate-x-0' : isMobile ? '-translate-x-full' : '-translate-x-full'}
+          ${isMobile ? 'w-72' : 'w-64'}
+          lg:translate-x-0
+          ${!isMobile && isOpen ? 'lg:w-64' : 'lg:w-20'}
+        `}>
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
+                <GraduationCap className="w-5 h-5 text-white" />
+              </div>
+              {isOpen && (
+                <div>
+                  <h1 className="text-lg font-bold text-gray-800 leading-tight">School</h1>
+                  <p className="text-xs text-blue-600 font-medium">Manager</p>
+                </div>
+              )}
+            </Link>
+            <button
+              onClick={onToggle}
+              className="p-1 hover:bg-gray-100 rounded-lg transition lg:hidden flex-shrink-0"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+            <button
+              onClick={onToggle}
+              className="p-1 hover:bg-gray-100 rounded-lg transition hidden lg:block flex-shrink-0"
+            >
+              {isOpen ? (
+                <X className="w-5 h-5 text-gray-500" />
+              ) : (
+                <Menu className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+          </div>
+          <div className="flex items-center justify-center h-[calc(100vh-100px)]">
+            <p className="text-sm text-gray-400 text-center px-4">
+              Please login to access the menu
+            </p>
+          </div>
+        </aside>
+      </>
+    );
+  }
 
   return (
     <>
@@ -317,10 +487,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
           ))}
         </nav>
 
-        {/* Footer - Subscription Card - Fixed at bottom */}
+        {/* Footer - User Info & Subscription Card - Fixed at bottom */}
         <div className={`flex-shrink-0 border-t border-gray-200 bg-gray-50/50 ${
           isOpen ? 'p-4' : 'p-2'
         }`}>
+          {isAuthenticated && user && (
+            <div className="mb-2">
+              {isOpen ? (
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-white rounded-lg border border-gray-100">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
+                    {user.full_name?.charAt(0) || user.username?.charAt(0) || 'U'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {user.full_name || user.username || 'User'}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate capitalize">
+                      {user.role?.replace('_', ' ') || 'User'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-8 h-8 mx-auto bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
+                  {user.full_name?.charAt(0) || user.username?.charAt(0) || 'U'}
+                </div>
+              )}
+            </div>
+          )}
+          
           {isOpen ? (
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-4 text-white">
               <p className="text-xs font-medium opacity-80">Subscription</p>

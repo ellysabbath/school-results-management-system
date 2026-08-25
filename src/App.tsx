@@ -1,9 +1,9 @@
+// src/App.tsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
-
-
+import ProtectedRoute from './components/modals/ProtectedRoute';
 
 // Dashboard Pages
 import AdminDashboard from './components/dashboard/AdminDashboard';
@@ -40,7 +40,6 @@ import SystemSettings from './components/super-admin/SystemSettings';
 import AllSchools from './components/super-admin/AllSchools';
 import SchoolDetails from './components/super-admin/SchoolDetails';
 import SystemAnalytics from './components/super-admin/SystemAnalytics';
- 
 
 // Common
 import Layout from './components/common/Layout';
@@ -62,24 +61,13 @@ import ResultManagement from './components/results/ResultManagement';
 import SubscriptionManagement from './pages/SubscriptionManagement';
 import NotificationCenter from './pages/NotificationCenter';
 import SubscriptionPlans from './components/billing/SubscriptionPlans';
-import PaymentMethod from './components/billing/PaymentMethod';
+
 import PaymentPage from './components/billing/PaymentPage';
 import UsersAdmin from './components/super-admin/UsersAdmin';
 import ContactManagement from './pages/ContactManagement';
+import MyResults from './components/results/MyResults';
 
 const App: React.FC = () => {
-  // Mock user for sidebar display
-  const mockUser = {
-    id: 'u1',
-    firstName: 'System',
-    lastName: 'Admin',
-    email: 'admin@system.com',
-    role: 'super_admin',
-    schoolId: '1',
-    phone: '+1-555-123-4567',
-  };
-  localStorage.setItem('user', JSON.stringify(mockUser));
-
   return (
     <AuthProvider>
       <Router>
@@ -103,356 +91,300 @@ const App: React.FC = () => {
         
         <Routes>
           {/* ==========================================
-              PUBLIC ROUTES (No Layout)
+              PUBLIC ROUTES (No Layout, No Auth Required)
               ========================================== */}
-          
-          {/* Landing Page */}
           <Route path="/" element={<Home />} />
-          
-          {/* About Page */}
           <Route path="/about" element={<About />} />
-          
-          {/* Contact Page */}
           <Route path="/contact" element={<Contact />} />
-         <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/register-school" element={<RegisterSchool />} />
-          
-          {/* Billing/Pricing Page */}
           <Route path="/pricing" element={<Pricing />} />
-           {/* Billing/Pricing Page */}
-          
-          {/* ==========================================
-              AUTH ROUTES
-              ========================================== */}
-          <Route path="/login" element={<Login />} />
           <Route path="/features" element={<Features />} />
+          
+          {/* Auth Routes */}
+          <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/register-school" element={<RegisterSchool />} />
+
           {/* ==========================================
-              DASHBOARD ROUTES - WITH LAYOUT
+              PROTECTED ROUTES - WITH LAYOUT
+              Using Django role names: super_admin, school_admin, teacher, student, parent
               ========================================== */}
           
-          {/* Root - Super Admin Dashboard */}
-          <Route
-            path="/dashboard"
-            element={
+          {/* Super Admin Routes */}
+          <Route path="/dashboard" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
               <Layout>
                 <SuperAdminDashboard />
               </Layout>
-            }
-          />
-
-
-          <Route 
-          path="/subscription" element={
-            <Layout>
-              <SubscriptionManagement />
-            </Layout>
-          
+            </ProtectedRoute>
           } />
-        <Route 
-        path="/notifications" element={
-          <Layout>
-            <NotificationCenter />
-          </Layout>
-       
-      } 
-        />
           
-          {/* School Admin Dashboard */}
-          <Route
-            path="/admin-dashboard"
-            element={
-              <Layout>
-                <AdminDashboard />
-              </Layout>
-            }
-          />
-          
-          {/* Teacher Dashboard */}
-          <Route
-            path="/teacher-dashboard"
-            element={
-              <Layout>
-                <TeacherDashboard />
-              </Layout>
-            }
-          />
-
-          <Route path="/billing" element={
-            <Layout>
-
-               <BillingHistory />
-
-            </Layout>
-            
-           } />
-
-
-
-        <Route path="/manage-users" element={
-            <Layout>
-
-               <UsersAdmin />
-
-            </Layout>
-            
-           } />
-
-          
-          {/* Student Dashboard */}
-          <Route
-            path="/student-dashboard"
-            element={
-              <Layout>
-                <StudentDashboard />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              STUDENT MANAGEMENT ROUTES
-              ========================================== */}
-          <Route
-            path="/students"
-            element={
-              <Layout>
-                <StudentList />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/students/new"
-            element={
-              <Layout>
-                <StudentForm />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/students/:id"
-            element={
-              <Layout>
-                <StudentDetails />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/students/:id/edit"
-            element={
-              <Layout>
-                <StudentForm />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              TEACHER MANAGEMENT ROUTES
-              ========================================== */}
-          <Route
-            path="/teachers"
-            element={
-              <Layout>
-                <TeacherList />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/teachers/new"
-            element={
-              <Layout>
-                <TeacherForm />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/teachers/:id/edit"
-            element={
-              <Layout>
-                <TeacherForm />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              SUBJECT MANAGEMENT ROUTES
-              ========================================== */}
-          <Route
-            path="/subjects"
-            element={
-              <Layout>
-                <SubjectManager />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              RESULT MANAGEMENT ROUTES
-              ========================================== */}
-          <Route
-            path="/results"
-            element={
-              <Layout>
-                <ResultEntry />
-              </Layout>
-            }
-          />
-
-          <Route
-            path="/manage-plans"
-            element={
-              <Layout>
-                <SubscriptionPlans />
-              </Layout>
-            }
-          />
-
-
-
-          <Route
-            path="/manage-payments"
-            element={
-              <Layout>
-                <PaymentMethod />
-              </Layout>
-            }
-          />
-
-
-
-          <Route
-            path="/payment"
-            element={
-              <Layout>
-                <PaymentPage />
-              </Layout>
-            }
-          />
-
-
-
-          <Route
-          path="/terms" element={
-          <Layout>
-             <TermManager />
-            </Layout>
-          }
-        />
-
-
-        <Route
-          path="/manage/mails" element={
-          <Layout>
-             <ContactManagement />
-            </Layout>
-          }
-        />
-
-        <Route
-          path="/view-results" element={
-          <Layout>
-             <ResultManagement />
-            </Layout>
-          }
-        />
-          
-          <Route
-            path="/my-results"
-            element={
-              <Layout>
-                <ResultView />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/report-card/:studentId"
-            element={
-              <Layout>
-                <ReportCard />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              ANALYTICS ROUTES
-              ========================================== */}
-          <Route
-            path="/analytics"
-            element={
-              <Layout>
-                <CommonAnalytics />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              SETTINGS ROUTES
-              ========================================== */}
-          <Route
-            path="/settings"
-            element={
-              <Layout>
-                <SchoolSettings />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/settings/profile"
-            element={
-              <Layout>
-                <ProfileSettings />
-              </Layout>
-            }
-          />
-          
-          {/* ==========================================
-              SUPER ADMIN ROUTES
-              ========================================== */}
-          <Route
-            path="/system/settings"
-            element={
-              <Layout>
-                <SystemSettings />
-              </Layout>
-            }
-          />
-          
-          <Route
-            path="/system/schools"
-            element={
+          <Route path="/system/schools" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
               <Layout>
                 <AllSchools />
               </Layout>
-            }
-          />
+            </ProtectedRoute>
+          } />
           
-          <Route
-            path="/system/schools/:id"
-            element={
+          <Route path="/system/schools/:id" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
               <Layout>
                 <SchoolDetails />
               </Layout>
-            }
-          />
+            </ProtectedRoute>
+          } />
           
-          <Route
-            path="/system/analytics"
-            element={
+          <Route path="/system/analytics" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
               <Layout>
                 <SystemAnalytics />
               </Layout>
-            }
-          />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/system/settings" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <Layout>
+                <SystemSettings />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/manage-users" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <Layout>
+                <UsersAdmin />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/manage/mails" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <Layout>
+                <ContactManagement />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/manage-plans" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <Layout>
+                <SubscriptionPlans />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/subscription" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <Layout>
+                <SubscriptionManagement />
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* School Admin Routes */}
+          <Route path="/admin-dashboard" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <AdminDashboard />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/students" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher']}>
+              <Layout>
+                <StudentList />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/students/new" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <StudentForm />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/students/:id" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher']}>
+              <Layout>
+                <StudentDetails />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/students/:id/edit" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <StudentForm />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/teachers" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <TeacherList />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/teachers/new" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <TeacherForm />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/teachers/:id/edit" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <TeacherForm />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/subjects" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <SubjectManager />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/terms" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <TermManager />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/billing" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'super_admin']}>
+              <Layout>
+                <BillingHistory />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/payment" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'super_admin']}>
+              <Layout>
+                <PaymentPage />
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* Teacher Routes */}
+          <Route path="/teacher-dashboard" element={
+            <ProtectedRoute allowedRoles={['teacher']}>
+              <Layout>
+                <TeacherDashboard />
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* Student Routes */}
+          <Route path="/student-dashboard" element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <Layout>
+                <StudentDashboard />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/student/my-results" element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <Layout>
+                <MyResults />
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* Parent Routes */}
+          <Route path="/parent-dashboard" element={
+            <ProtectedRoute allowedRoles={['parent']}>
+              <Layout>
+                {/* ParentDashboard component would need to be created */}
+                <div>Parent Dashboard</div>
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* Shared Routes (Multiple Roles) */}
+          <Route path="/results" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher']}>
+              <Layout>
+                <ResultEntry />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/view-results" element={
+            <ProtectedRoute allowedRoles={['school_admin']}>
+              <Layout>
+                <ResultManagement />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/my-results" element={
+            <ProtectedRoute allowedRoles={['student', 'school_admin', 'teacher', 'parent']}>
+              <Layout>
+                <ResultView />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/report-card/:studentId" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher', 'student', 'parent']}>
+              <Layout>
+                <ReportCard />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/analytics" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher', 'student', 'super_admin', 'parent']}>
+              <Layout>
+                <CommonAnalytics />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/settings" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher', 'student', 'super_admin', 'parent']}>
+              <Layout>
+                <SchoolSettings />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/settings/profile" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher', 'student', 'super_admin', 'parent']}>
+              <Layout>
+                <ProfileSettings />
+              </Layout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/notifications" element={
+            <ProtectedRoute allowedRoles={['school_admin', 'teacher', 'student', 'super_admin', 'parent']}>
+              <Layout>
+                <NotificationCenter />
+              </Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* Catch-all - Redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         
         {/* Footer - Only shown on public pages */}

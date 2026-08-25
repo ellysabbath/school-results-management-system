@@ -17,9 +17,11 @@ import {
   Receipt,
   ExternalLink,
   Upload,
-  Lock
+  Lock,
+  Wallet,
+  TrendingUp
 } from 'lucide-react';
-import { paymentService } from '../../api/schoolApi';
+import { paymentService, schoolService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal';
@@ -38,6 +40,7 @@ interface Payment {
   plan_price: number;
   currency: string;
   amount: number;
+  formatted_amount?: string;
   payment_method: string;
   telecom_provider: string;
   transaction_reference: string;
@@ -70,13 +73,14 @@ interface PaymentFormData {
 
 const BillingHistory: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, school } = useAuth();
   
   const [payments, setPayments] = useState<Payment[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [schoolData, setSchoolData] = useState<any>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -113,10 +117,46 @@ const BillingHistory: React.FC = () => {
     paidCount: 0,
     pendingCount: 0,
     failedCount: 0,
+    totalAmount: 0,
   });
 
-  // Get user email from auth context
+  // Get user email and school info from auth context
   const userEmail = user?.email || '';
+  const userSchoolCode = school?.school_code || user?.school_code || '';
+  const userSchoolName = school?.name || '';
+
+  // Fetch school data for the logged-in user
+  const fetchSchoolData = useCallback(async () => {
+    if (!isAuthenticated || !userEmail) return;
+
+    try {
+      const response = await schoolService.getSchools({ 
+        admin_email: userEmail,
+        page_size: 1
+      });
+      
+      let schoolDataList = [];
+      if (response.results) {
+        schoolDataList = response.results;
+      } else if (Array.isArray(response)) {
+        schoolDataList = response;
+      }
+      
+      if (schoolDataList && schoolDataList.length > 0) {
+        const school = schoolDataList[0];
+        setSchoolData(school);
+        setFormData(prev => ({
+          ...prev,
+          school_code: school.school_code || '',
+          admin_email: school.admin_email || userEmail,
+          admin_name: school.admin_name || '',
+          admin_phone: school.phone || '',
+        }));
+      }
+    } catch (error) {
+      console.error('[BillingHistory] Failed to fetch school data:', error);
+    }
+  }, [isAuthenticated, userEmail]);
 
   // Fetch payments from Tesla API - filtered by admin_email
   const fetchPayments = useCallback(async () => {
@@ -127,16 +167,23 @@ const BillingHistory: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Fetch all transactions and filter by admin_email on frontend
+      // First fetch the school to get the school code
       const response = await paymentService.getTransactions({ page_size: 100 });
       console.log('[BillingHistory] Payments response:', response);
       
-      let paymentData = [];
+      let paymentData: Payment[] = [];
       if (response.results) {
         paymentData = response.results;
       } else if (Array.isArray(response)) {
         paymentData = response;
       }
+      
+      // Ensure amount is a number
+      paymentData = paymentData.map(p => ({
+        ...p,
+        amount: typeof p.amount === 'string' ? parseFloat(p.amount) : p.amount,
+        plan_price: typeof p.plan_price === 'string' ? parseFloat(p.plan_price) : p.plan_price,
+      }));
       
       // Filter transactions by admin_email (logged in user's email)
       const userPayments = paymentData.filter(
@@ -153,13 +200,29 @@ const BillingHistory: React.FC = () => {
       const pending = userPayments.filter((p: Payment) => p.status === 'pending' || p.status === 'processing');
       const failed = userPayments.filter((p: Payment) => p.status === 'failed');
       
+      const totalSpent = completed.reduce((acc: number, p: Payment) => {
+        const amount = typeof p.amount === 'number' ? p.amount : parseFloat(String(p.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
+      const pendingAmount = pending.reduce((acc: number, p: Payment) => {
+        const amount = typeof p.amount === 'number' ? p.amount : parseFloat(String(p.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
+      const totalAmount = userPayments.reduce((acc: number, p: Payment) => {
+        const amount = typeof p.amount === 'number' ? p.amount : parseFloat(String(p.amount)) || 0;
+        return acc + amount;
+      }, 0);
+      
       setStats({
-        totalSpent: completed.reduce((acc: number, p: Payment) => acc + p.amount, 0),
+        totalSpent: totalSpent,
         totalInvoices: userPayments.length,
-        pendingAmount: pending.reduce((acc: number, p: Payment) => acc + p.amount, 0),
+        pendingAmount: pendingAmount,
         paidCount: completed.length,
         pendingCount: pending.length,
         failedCount: failed.length,
+        totalAmount: totalAmount,
       });
       
     } catch (error: any) {
@@ -172,8 +235,12 @@ const BillingHistory: React.FC = () => {
 
   // Load data on mount
   useEffect(() => {
-    fetchPayments();
-  }, [fetchPayments]);
+    if (isAuthenticated && userEmail) {
+      Promise.all([fetchSchoolData(), fetchPayments()]);
+    } else {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, userEmail, fetchSchoolData, fetchPayments]);
 
   // Filter payments
   useEffect(() => {
@@ -204,10 +271,10 @@ const BillingHistory: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
-      school_code: '',
+      school_code: schoolData?.school_code || userSchoolCode || '',
       admin_email: userEmail || '',
-      admin_name: '',
-      admin_phone: '',
+      admin_name: schoolData?.admin_name || '',
+      admin_phone: schoolData?.phone || '',
       amount: 0,
       payment_method: 'vodacom',
       telecom_provider: 'vodacom',
@@ -224,7 +291,7 @@ const BillingHistory: React.FC = () => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) : value,
+      [name]: type === 'number' ? parseFloat(value) || 0 : value,
     }));
     if (formErrors[name]) {
       setFormErrors(prev => ({ ...prev, [name]: '' }));
@@ -436,17 +503,17 @@ const BillingHistory: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'completed':
-        return 'bg-green-50 text-green-600';
+        return 'bg-green-50 text-green-600 border-green-200';
       case 'pending':
-        return 'bg-yellow-50 text-yellow-600';
+        return 'bg-yellow-50 text-yellow-600 border-yellow-200';
       case 'processing':
-        return 'bg-blue-50 text-blue-600';
+        return 'bg-blue-50 text-blue-600 border-blue-200';
       case 'failed':
-        return 'bg-red-50 text-red-600';
+        return 'bg-red-50 text-red-600 border-red-200';
       case 'cancelled':
-        return 'bg-gray-50 text-gray-600';
+        return 'bg-gray-50 text-gray-600 border-gray-200';
       default:
-        return 'bg-secondary-50 text-secondary-600';
+        return 'bg-secondary-50 text-secondary-600 border-secondary-200';
     }
   };
 
@@ -467,7 +534,15 @@ const BillingHistory: React.FC = () => {
     }
   };
 
+  const getMethodDisplay = (method: string): string => {
+    if (!method) return 'N/A';
+    return method.charAt(0).toUpperCase() + method.slice(1);
+  };
+
   const formatCurrency = (amount: number): string => {
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      return 'TZS 0';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'TZS',
@@ -534,6 +609,11 @@ const BillingHistory: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-secondary-900">My Payment History</h1>
             <p className="text-secondary-500">View and manage your payment history</p>
+            {schoolData && (
+              <p className="text-xs text-secondary-400 mt-1">
+                {schoolData.name} ({schoolData.school_code})
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -567,34 +647,48 @@ const BillingHistory: React.FC = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Total Spent</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Wallet className="w-4 h-4 text-green-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Spent</p>
+          </div>
           <p className="text-lg font-bold text-secondary-900">
             {isLoading ? '...' : formatCurrency(stats.totalSpent)}
           </p>
+          <p className="text-xs text-secondary-400">{stats.paidCount} completed transactions</p>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Total Transactions</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Receipt className="w-4 h-4 text-blue-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Transactions</p>
+          </div>
           <p className="text-lg font-bold text-secondary-900">
             {isLoading ? '...' : stats.totalInvoices}
           </p>
-          <div className="flex gap-2 text-xs mt-1">
+          <div className="flex gap-2 text-xs mt-1 flex-wrap">
             <span className="text-green-600">{stats.paidCount} Completed</span>
             <span className="text-yellow-600">{stats.pendingCount} Pending</span>
             <span className="text-red-600">{stats.failedCount} Failed</span>
           </div>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Pending Amount</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-yellow-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Pending Amount</p>
+          </div>
           <p className="text-lg font-bold text-yellow-600">
             {isLoading ? '...' : formatCurrency(stats.pendingAmount)}
           </p>
+          <p className="text-xs text-secondary-400">{stats.pendingCount} pending transactions</p>
         </div>
         <div className="bg-white rounded-lg border border-secondary-200 p-4">
-          <p className="text-xs text-secondary-400">Next Payment</p>
-          <p className="text-lg font-bold text-secondary-900">
-            as you paid
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-4 h-4 text-purple-600" />
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Amount</p>
+          </div>
+          <p className="text-lg font-bold text-purple-600">
+            {isLoading ? '...' : formatCurrency(stats.totalAmount)}
           </p>
-          <p className="text-xs text-secondary-400 mt-1">Due on September 1, 2026</p>
+          <p className="text-xs text-secondary-400">Across all transactions</p>
         </div>
       </div>
 
@@ -617,7 +711,7 @@ const BillingHistory: React.FC = () => {
           >
             {statusOptions.map(status => (
               <option key={status} value={status}>
-                {status === 'all' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1)}
+                {status === 'all' ? 'All Status' : getStatusLabel(status)}
               </option>
             ))}
           </select>
@@ -628,7 +722,7 @@ const BillingHistory: React.FC = () => {
           >
             {paymentMethods.map(method => (
               <option key={method} value={method}>
-                {method === 'all' ? 'All Methods' : method.charAt(0).toUpperCase() + method.slice(1)}
+                {method === 'all' ? 'All Methods' : getMethodDisplay(method)}
               </option>
             ))}
           </select>
@@ -703,17 +797,19 @@ const BillingHistory: React.FC = () => {
                           <p className="text-xs text-secondary-400">{payment.school_code || 'N/A'}</p>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm font-medium text-secondary-900">
-                        {formatCurrency(payment.amount)}
+                      <td className="py-3 px-4">
+                        <span className="text-sm font-medium text-secondary-900">
+                          {payment.formatted_amount || formatCurrency(payment.amount)}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-secondary-600">
+                      <td className="py-3 px-4 text-sm text-secondary-600 capitalize">
                         {payment.plan_name || 'N/A'}
                       </td>
                       <td className="py-3 px-4 text-sm text-secondary-600">
-                        {payment.payment_method?.charAt(0).toUpperCase() + payment.payment_method?.slice(1) || 'N/A'}
+                        {getMethodDisplay(payment.payment_method)}
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(payment.status)}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(payment.status)}`}>
                           {getStatusIcon(payment.status)}
                           {getStatusLabel(payment.status)}
                         </span>
@@ -722,7 +818,7 @@ const BillingHistory: React.FC = () => {
                         {formatDate(payment.created_at)}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openViewModal(payment)}
                             className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
@@ -917,25 +1013,25 @@ const BillingHistory: React.FC = () => {
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Amount</p>
                     <p className="text-xl font-bold text-primary-600">
-                      {formatCurrency(selectedPayment.amount)}
+                      {selectedPayment.formatted_amount || formatCurrency(selectedPayment.amount)}
                     </p>
                   </div>
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Plan</p>
-                    <p className="font-medium text-secondary-900">
+                    <p className="font-medium text-secondary-900 capitalize">
                       {selectedPayment.plan_name}
                     </p>
                   </div>
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Payment Method</p>
                     <p className="font-medium text-secondary-900">
-                      {selectedPayment.payment_method?.charAt(0).toUpperCase() + selectedPayment.payment_method?.slice(1) || 'N/A'}
+                      {getMethodDisplay(selectedPayment.payment_method)}
                     </p>
                   </div>
                   <div className="p-4 bg-secondary-50 rounded-lg">
                     <p className="text-xs text-secondary-400 mb-1">Telecom Provider</p>
                     <p className="font-medium text-secondary-900">
-                      {selectedPayment.telecom_provider?.charAt(0).toUpperCase() + selectedPayment.telecom_provider?.slice(1) || 'N/A'}
+                      {getMethodDisplay(selectedPayment.telecom_provider)}
                     </p>
                   </div>
                 </div>
@@ -1118,7 +1214,7 @@ const BillingHistory: React.FC = () => {
                   Admin Phone <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <PhoneCall className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                   <input
                     type="tel"
                     name="admin_phone"
@@ -1174,8 +1270,8 @@ const BillingHistory: React.FC = () => {
                   }`}
                   disabled={isSaving}
                 >
-                  <option value="starter">Basic</option>
-                  <option value="professional">Premium</option>
+                  <option value="starter">Starter</option>
+                  <option value="professional">Professional</option>
                   <option value="enterprise">Enterprise</option>
                   <option value="trial">Trial</option>
                 </select>

@@ -38,7 +38,7 @@ const Login: React.FC = () => {
       
       if (response.status === 'success') {
         toast.success('Welcome back! 🎉');
-        navigate('/dashboard');
+        navigate('/settings/profile');
       }
 
     } catch (err: any) {

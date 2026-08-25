@@ -8,7 +8,8 @@ import {
   CheckCircle, XCircle, Clock, ArrowRight,
   Plus, Edit, Trash2, BarChart, Award,
   Mail, Send, Check, FileDown, MailCheck,
-  ChevronDown, ChevronUp, FileSpreadsheet
+  ChevronDown, ChevronUp, FileSpreadsheet,
+  Share2, EyeOff, Globe, Lock
 } from 'lucide-react';
 import { resultService, studentService, subjectService, schoolService, termService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
@@ -161,6 +162,7 @@ const ResultManagement: React.FC = () => {
   const [isSendingEmails, setIsSendingEmails] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [bulkDownloadFormat, setBulkDownloadFormat] = useState<'pdf' | 'excel'>('pdf');
   
   // Filter States
@@ -211,6 +213,10 @@ const ResultManagement: React.FC = () => {
     includeAllStudents: true,
     selectedStudentIds: [] as number[],
   });
+
+  // Bulk Publish Modal States
+  const [isBulkPublishModalOpen, setIsBulkPublishModalOpen] = useState(false);
+  const [bulkPublishAction, setBulkPublishAction] = useState<'publish' | 'unpublish'>('publish');
 
   // ============================================
   // DERIVED VALUES
@@ -463,6 +469,105 @@ const ResultManagement: React.FC = () => {
     });
     
     return Array.from(studentMap.values());
+  };
+
+  // ============================================
+  // PUBLISH / UNPUBLISH FUNCTIONS
+  // ============================================
+
+  const handlePublishSingle = async (studentId: number, publish: boolean) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) {
+      toast.error('Student not found');
+      return;
+    }
+
+    // Get all result IDs for this student
+    const studentResults = results.filter(r => r.student === studentId);
+    if (studentResults.length === 0) {
+      toast.error('No results found for this student');
+      return;
+    }
+
+    const resultIds = studentResults.map(r => r.id);
+
+    try {
+      await resultService.publishResults({
+        result_ids: resultIds,
+        publish: publish
+      });
+      
+      toast.success(`Results ${publish ? 'published' : 'unpublished'} successfully for ${student.full_name}`);
+      await fetchData(currentSchoolInfo?.code || '');
+      
+    } catch (error: any) {
+      console.error('[ResultManagement] Error publishing results:', error);
+      toast.error(error.response?.data?.message || `Failed to ${publish ? 'publish' : 'unpublish'} results`);
+    }
+  };
+
+  const openBulkPublishModal = (action: 'publish' | 'unpublish') => {
+    const selectedIds = Array.from(selectedStudents);
+    if (selectedIds.length === 0) {
+      toast.error('Please select at least one student');
+      return;
+    }
+
+    // Check if selected students have results
+    const selectedRows = filteredRows.filter(r => selectedIds.includes(r.studentId));
+    const studentsWithResults = selectedRows.filter(r => r.resultCount > 0);
+    
+    if (studentsWithResults.length === 0) {
+      toast.error('Selected students do not have results');
+      return;
+    }
+
+    setBulkPublishAction(action);
+    setIsBulkPublishModalOpen(true);
+  };
+
+  const handleBulkPublish = async () => {
+    if (!currentSchoolInfo) {
+      toast.error('School information not found');
+      return;
+    }
+
+    const selectedIds = Array.from(selectedStudents);
+    const selectedRows = filteredRows.filter(r => selectedIds.includes(r.studentId));
+    
+    // Get all result IDs from selected students
+    let allResultIds: number[] = [];
+    selectedRows.forEach(row => {
+      const studentResults = results.filter(r => r.student === row.studentId);
+      const ids = studentResults.map(r => r.id);
+      allResultIds = [...allResultIds, ...ids];
+    });
+
+    if (allResultIds.length === 0) {
+      toast.error('No results found for selected students');
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      const publish = bulkPublishAction === 'publish';
+      await resultService.publishResults({
+        result_ids: allResultIds,
+        publish: publish
+      });
+      
+      toast.success(`Successfully ${publish ? 'published' : 'unpublished'} ${allResultIds.length} results for ${selectedRows.length} students`);
+      await fetchData(currentSchoolInfo.code);
+      setSelectedStudents(new Set());
+      setSelectAll(false);
+      setIsBulkPublishModalOpen(false);
+      
+    } catch (error: any) {
+      console.error('[ResultManagement] Error bulk publishing results:', error);
+      toast.error(error.response?.data?.message || `Failed to ${bulkPublishAction === 'publish' ? 'publish' : 'unpublish'} results`);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   // ============================================
@@ -864,7 +969,7 @@ const ResultManagement: React.FC = () => {
   };
 
   const handleCreateResults = () => {
-    navigate('/results/create');
+    navigate('/results');
   };
 
   const toggleExpandStudent = (studentId: number) => {
@@ -1072,14 +1177,32 @@ const ResultManagement: React.FC = () => {
             <>
               {/* Bulk Actions */}
               {selectedStudents.size > 0 && (
-                <button
-                  onClick={openEmailModal}
-                  disabled={isSendingEmails}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-                >
-                  <Mail className="w-4 h-4" />
-                  Send to {selectedStudents.size} Selected
-                </button>
+                <>
+                  <button
+                    onClick={() => openBulkPublishModal('publish')}
+                    disabled={isPublishing}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50"
+                  >
+                    <Globe className="w-4 h-4" />
+                    Publish Selected
+                  </button>
+                  <button
+                    onClick={() => openBulkPublishModal('unpublish')}
+                    disabled={isPublishing}
+                    className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm disabled:opacity-50"
+                  >
+                    <Lock className="w-4 h-4" />
+                    Unpublish Selected
+                  </button>
+                  <button
+                    onClick={openEmailModal}
+                    disabled={isSendingEmails}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Send to {selectedStudents.size} Selected
+                  </button>
+                </>
               )}
               <button 
                 onClick={openBulkDownloadModal}
@@ -1136,7 +1259,7 @@ const ResultManagement: React.FC = () => {
           STATS CARDS
           ========================================== */}
       {studentResultRows.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg border border-secondary-200 p-4">
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Total Students</p>
             <p className="text-2xl font-bold text-secondary-900 mt-1">
@@ -1162,6 +1285,12 @@ const ResultManagement: React.FC = () => {
             <p className="text-xs text-secondary-400 uppercase tracking-wider">Published</p>
             <p className="text-2xl font-bold text-blue-600 mt-1">
               {isLoading ? '...' : studentResultRows.filter(r => r.subjectResults.some(s => s.isPublished)).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg border border-secondary-200 p-4">
+            <p className="text-xs text-secondary-400 uppercase tracking-wider">Draft</p>
+            <p className="text-2xl font-bold text-yellow-600 mt-1">
+              {isLoading ? '...' : studentResultRows.filter(r => r.subjectResults.some(s => !s.isPublished)).length}
             </p>
           </div>
         </div>
@@ -1416,7 +1545,7 @@ const ResultManagement: React.FC = () => {
                   ))}
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Avg</th>
                   <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Grade</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Points</th>
+                  <th className="text-left py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
                   <th className="text-right py-3 px-4 text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -1426,6 +1555,8 @@ const ResultManagement: React.FC = () => {
                   const isSelected = selectedStudents.has(row.studentId);
                   const isExpanded = expandedStudent === row.studentId;
                   const hasEmail = !!row.email;
+                  const allPublished = row.subjectResults.every(s => s.isPublished);
+                  const hasResults = row.resultCount > 0;
                   
                   return (
                     <React.Fragment key={row.studentId}>
@@ -1492,11 +1623,45 @@ const ResultManagement: React.FC = () => {
                             <span className="text-sm text-secondary-400">-</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-sm text-secondary-600">
-                          {row.resultCount > 0 ? row.totalPoints.toFixed(1) : '-'}
+                        <td className="py-3 px-4">
+                          {hasResults ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(allPublished)}`}>
+                              {allPublished ? (
+                                <Globe className="w-3 h-3" />
+                              ) : (
+                                <Lock className="w-3 h-3" />
+                              )}
+                              {allPublished ? 'Published' : 'Draft'}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-secondary-400">-</span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {hasResults && (
+                              <>
+                                {allPublished ? (
+                                  <button
+                                    onClick={() => handlePublishSingle(row.studentId, false)}
+                                    disabled={isPublishing}
+                                    className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                                    title="Unpublish"
+                                  >
+                                    <Lock className="w-4 h-4 text-yellow-500 hover:text-yellow-700" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handlePublishSingle(row.studentId, true)}
+                                    disabled={isPublishing}
+                                    className="p-1.5 hover:bg-secondary-100 rounded-lg transition-colors"
+                                    title="Publish"
+                                  >
+                                    <Globe className="w-4 h-4 text-green-500 hover:text-green-700" />
+                                  </button>
+                                )}
+                              </>
+                            )}
                             <button
                               onClick={() => handleDownloadPDF(row.studentId)}
                               disabled={isDownloading || row.resultCount === 0}
@@ -1533,12 +1698,25 @@ const ResultManagement: React.FC = () => {
                       {/* Expanded Row - Subject Details */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={subjects.length + 8} className="py-4 px-4 bg-secondary-50">
+                          <td colSpan={subjects.length + 9} className="py-4 px-4 bg-secondary-50">
                             <div className="space-y-3">
-                              <h4 className="font-semibold text-secondary-900">
-                                Detailed Results for {row.studentName}
-                                {selectedTerm && ` - ${terms.find(t => t.id === selectedTerm)?.name || 'Term'}`}
-                              </h4>
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-semibold text-secondary-900">
+                                  Detailed Results for {row.studentName}
+                                  {selectedTerm && ` - ${terms.find(t => t.id === selectedTerm)?.name || 'Term'}`}
+                                </h4>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-secondary-500">Status:</span>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(allPublished)}`}>
+                                    {allPublished ? (
+                                      <Globe className="w-3 h-3" />
+                                    ) : (
+                                      <Lock className="w-3 h-3" />
+                                    )}
+                                    {allPublished ? 'Published' : 'Draft'}
+                                  </span>
+                                </div>
+                              </div>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {row.subjectResults.map((subject) => (
                                   <div key={subject.subjectId} className="bg-white rounded-lg p-3 border border-secondary-200">
@@ -1558,7 +1736,12 @@ const ResultManagement: React.FC = () => {
                                       <p className="text-sm text-secondary-600">
                                         Points: {subject.gradePoint.toFixed(1)}
                                       </p>
-                                      <p className="text-xs text-secondary-400">
+                                      <p className="text-xs text-secondary-400 flex items-center gap-1">
+                                        {subject.isPublished ? (
+                                          <Globe className="w-3 h-3 text-green-500" />
+                                        ) : (
+                                          <Lock className="w-3 h-3 text-yellow-500" />
+                                        )}
                                         Status: {subject.isPublished ? 'Published' : 'Draft'}
                                       </p>
                                       {subject.remarks && (
@@ -1665,6 +1848,90 @@ const ResultManagement: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ==========================================
+          BULK PUBLISH MODAL
+          ========================================== */}
+      {isBulkPublishModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-slide-up">
+            <div className="border-b border-secondary-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-secondary-900 flex items-center gap-2">
+                  {bulkPublishAction === 'publish' ? (
+                    <Globe className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <Lock className="w-5 h-5 text-yellow-600" />
+                  )}
+                  {bulkPublishAction === 'publish' ? 'Publish' : 'Unpublish'} Results
+                </h2>
+                <p className="text-sm text-secondary-500">
+                  {selectedStudents.size} students selected
+                </p>
+              </div>
+              <button
+                onClick={() => setIsBulkPublishModalOpen(false)}
+                className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-secondary-400" />
+              </button>
+            </div>
+
+            <div className="px-6 py-6 space-y-4">
+              <p className="text-secondary-600">
+                Are you sure you want to <span className="font-semibold">
+                  {bulkPublishAction === 'publish' ? 'publish' : 'unpublish'}
+                </span> results for <span className="font-semibold">{selectedStudents.size}</span> selected students?
+              </p>
+              <div className="bg-secondary-50 rounded-lg p-3">
+                <p className="text-sm text-secondary-500">
+                  {bulkPublishAction === 'publish' 
+                    ? 'This will make all results visible to students and parents.'
+                    : 'This will hide all results from students and parents.'
+                  }
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkPublishModalOpen(false)}
+                  className="px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
+                  disabled={isPublishing}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkPublish}
+                  disabled={isPublishing}
+                  className={`px-6 py-2 text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${
+                    bulkPublishAction === 'publish' 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-yellow-600 hover:bg-yellow-700'
+                  }`}
+                >
+                  {isPublishing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      {bulkPublishAction === 'publish' ? (
+                        <Globe className="w-4 h-4" />
+                      ) : (
+                        <Lock className="w-4 h-4" />
+                      )}
+                      {bulkPublishAction === 'publish' ? 'Publish' : 'Unpublish'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ==========================================
           BULK DOWNLOAD MODAL
