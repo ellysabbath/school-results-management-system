@@ -23,29 +23,47 @@ const schoolApi = axios.create({
 // REQUEST INTERCEPTOR - Add Token & Validate Auth
 // ============================================
 
+// ============================================
+// REQUEST INTERCEPTOR - Add Token (FIXED)
+// ============================================
+
 schoolApi.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
-    const user = localStorage.getItem('user');
+    // Try to get token from multiple sources
+    let token = localStorage.getItem('access_token');
     
-    if (!token || !user) {
-      return Promise.reject({
-        response: {
-          status: 401,
-          data: { 
-            status: 'error', 
-            message: 'Authentication required. Please login.' 
-          }
-        }
-      });
+    // If not in localStorage, try sessionStorage
+    if (!token) {
+      token = sessionStorage.getItem('access_token');
     }
     
-    config.headers.Authorization = `Bearer ${token}`;
+    // If still no token, try to get from auth_data
+    if (!token) {
+      try {
+        const authData = localStorage.getItem('auth_data');
+        if (authData) {
+          const parsed = JSON.parse(authData);
+          token = parsed?.access_token || parsed?.token || null;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+    
+    // If we have a token, add it to the headers
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+      console.log('[API] Token attached to request:', config.url);
+    } else {
+      console.warn('[API] No token found for request:', config.url);
+      // Don't add Authorization header if no token
+      delete config.headers.Authorization;
+    }
+    
     return config;
   },
   (error) => Promise.reject(error)
 );
-
 // ============================================
 // RESPONSE INTERCEPTOR - Handle Token Refresh
 // ============================================
