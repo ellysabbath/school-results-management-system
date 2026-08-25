@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { useAuth } from '../../context/AuthContext';
+
 import Header from './Header';
 import Sidebar from './Sidebar';
 
@@ -9,7 +9,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user } = useAuth();
+  // Remove unused user variable
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -59,7 +59,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Header 
           onMenuClick={handleSidebarToggle} 
           isMobile={isMobile}
-          sidebarOpen={sidebarOpen}
         />
         <main className="p-4 md:p-6">
           <div className="max-w-7xl mx-auto animate-fade-in">

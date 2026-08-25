@@ -28,7 +28,6 @@ schoolApi.interceptors.request.use(
     const token = localStorage.getItem('access_token');
     const user = localStorage.getItem('user');
     
-    // If no token or no user, reject the request
     if (!token || !user) {
       return Promise.reject({
         response: {
@@ -54,14 +53,12 @@ schoolApi.interceptors.request.use(
 schoolApi.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // FIX: Check if error.config exists before accessing it
     if (!error.config) {
       return Promise.reject(error);
     }
     
     const originalRequest = error.config;
     
-    // Only attempt refresh on 401 and not already retrying
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       
@@ -81,7 +78,6 @@ schoolApi.interceptors.response.use(
         
         return schoolApi(originalRequest);
       } catch (refreshError) {
-        // Refresh failed - clear everything and redirect to login
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
@@ -90,7 +86,6 @@ schoolApi.interceptors.response.use(
       }
     }
     
-    // If 401 and no refresh possible, redirect to login
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
@@ -103,7 +98,7 @@ schoolApi.interceptors.response.use(
 );
 
 // ============================================
-// PAYMENT API - Separate instance for payments (No strict auth)
+// PAYMENT API - Separate instance for payments
 // ============================================
 
 const paymentApi = axios.create({
@@ -115,7 +110,6 @@ const paymentApi = axios.create({
   timeout: 30000,
 });
 
-// Payment API Request Interceptor - Just add token if available
 paymentApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -127,11 +121,9 @@ paymentApi.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Payment API Response Interceptor - Handle 401 gracefully
 paymentApi.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // FIX: Check if error.config exists
     if (!error.config) {
       return Promise.reject(error);
     }
@@ -170,7 +162,7 @@ paymentApi.interceptors.response.use(
 );
 
 // ============================================
-// ADMIN USER API - Separate instance for admin (No strict auth)
+// ADMIN USER API - Separate instance for admin
 // ============================================
 
 const adminApi = axios.create({
@@ -182,7 +174,6 @@ const adminApi = axios.create({
   timeout: 30000,
 });
 
-// Admin API Request Interceptor - Just add token if available
 adminApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -194,7 +185,6 @@ adminApi.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Admin API Response Interceptor - Handle 401 gracefully
 adminApi.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -240,10 +230,6 @@ adminApi.interceptors.response.use(
 // ============================================
 
 export const adminUserService = {
-  /**
-   * Get all users with optional filters
-   * GET /api/admin/users/
-   */
   getUsers: async (params?: any) => {
     try {
       const response = await adminApi.get('/admin/users/', { params });
@@ -254,10 +240,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Get a single user by ID
-   * GET /api/admin/users/{id}/
-   */
   getUser: async (id: number) => {
     try {
       const response = await adminApi.get(`/admin/users/${id}/`);
@@ -268,10 +250,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Create a new user
-   * POST /api/admin/users/create/
-   */
   createUser: async (data: any) => {
     try {
       console.log('[adminUserService] Creating user:', data);
@@ -285,10 +263,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Update a user
-   * PUT /api/admin/users/{id}/update/
-   */
   updateUser: async (id: number, data: any) => {
     try {
       console.log('[adminUserService] Updating user:', data);
@@ -302,10 +276,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Delete a user
-   * DELETE /api/admin/users/{id}/delete/
-   */
   deleteUser: async (id: number) => {
     try {
       const response = await adminApi.delete(`/admin/users/${id}/delete/`);
@@ -316,10 +286,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Toggle user active status
-   * POST /api/admin/users/{id}/toggle-active/
-   */
   toggleUserActive: async (id: number) => {
     try {
       const response = await adminApi.post(`/admin/users/${id}/toggle-active/`);
@@ -330,10 +296,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Toggle user email verification
-   * POST /api/admin/users/{id}/toggle-verified/
-   */
   toggleUserVerified: async (id: number) => {
     try {
       const response = await adminApi.post(`/admin/users/${id}/toggle-verified/`);
@@ -344,10 +306,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Change user password
-   * POST /api/admin/users/{id}/change-password/
-   */
   changeUserPassword: async (id: number, newPassword: string) => {
     try {
       const response = await adminApi.post(`/admin/users/${id}/change-password/`, {
@@ -360,10 +318,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Get user activity logs
-   * GET /api/admin/users/activity-logs/
-   */
   getUserActivityLogs: async (params?: any) => {
     try {
       const response = await adminApi.get('/admin/users/activity-logs/', { params });
@@ -374,10 +328,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Get user statistics
-   * GET /api/admin/users/stats/
-   */
   getUserStats: async () => {
     try {
       const response = await adminApi.get('/admin/users/stats/');
@@ -388,10 +338,6 @@ export const adminUserService = {
     }
   },
 
-  /**
-   * Bulk create users
-   * POST /api/admin/users/bulk-create/
-   */
   bulkCreateUsers: async (users: any[]) => {
     try {
       const response = await adminApi.post('/admin/users/bulk-create/', { users });
@@ -408,49 +354,31 @@ export const adminUserService = {
 // ============================================
 
 export const schoolService = {
-  /**
-   * Get all schools with optional filters
-   */
   getSchools: async (params?: any) => {
     const response = await schoolApi.get('/schools/', { params });
     return response.data;
   },
 
-  /**
-   * Get a single school by ID
-   */
   getSchool: async (id: number) => {
     const response = await schoolApi.get(`/schools/${id}/`);
     return response.data;
   },
 
-  /**
-   * Create a new school
-   */
   createSchool: async (data: any) => {
     const response = await schoolApi.post('/schools/', data);
     return response.data;
   },
 
-  /**
-   * Update an existing school
-   */
   updateSchool: async (id: number, data: any) => {
     const response = await schoolApi.put(`/schools/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Delete a school
-   */
   deleteSchool: async (id: number) => {
     const response = await schoolApi.delete(`/schools/${id}/`);
     return response.data;
   },
 
-  /**
-   * Search schools by query
-   */
   searchSchools: async (query: string) => {
     const response = await schoolApi.get('/schools/search/', {
       params: { q: query }
@@ -458,17 +386,11 @@ export const schoolService = {
     return response.data;
   },
 
-  /**
-   * Get school statistics
-   */
   getSchoolStats: async () => {
     const response = await schoolApi.get('/schools/stats/');
     return response.data;
   },
 
-  /**
-   * Get dashboard statistics for a school
-   */
   getDashboardStats: async (schoolId: string) => {
     const response = await schoolApi.get('/schools/dashboard-stats/', {
       params: { school_id: schoolId }
@@ -482,9 +404,6 @@ export const schoolService = {
 // ============================================
 
 export const studentService = {
-  /**
-   * Get students by school code
-   */
   getStudentsBySchoolCode: async (schoolCode: string) => {
     if (!schoolCode || schoolCode.trim() === '') {
       throw new Error('School code is required');
@@ -499,49 +418,31 @@ export const studentService = {
     return response.data;
   },
 
-  /**
-   * Get all students with optional filters
-   */
   getStudents: async (params?: any) => {
     const response = await schoolApi.get('/schools/students/', { params });
     return response.data;
   },
 
-  /**
-   * Get a single student by ID
-   */
   getStudent: async (id: number) => {
     const response = await schoolApi.get(`/schools/students/${id}/`);
     return response.data;
   },
 
-  /**
-   * Create a new student
-   */
   createStudent: async (data: any) => {
     const response = await schoolApi.post('/schools/students/', data);
     return response.data;
   },
 
-  /**
-   * Update an existing student
-   */
   updateStudent: async (id: number, data: any) => {
     const response = await schoolApi.put(`/schools/students/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Delete a student
-   */
   deleteStudent: async (id: number) => {
     const response = await schoolApi.delete(`/schools/students/${id}/`);
     return response.data;
   },
 
-  /**
-   * Get students by class
-   */
   getStudentsByClass: async (className: string, schoolId?: string, schoolCode?: string) => {
     const params: any = { student_class: className };
     if (schoolId) params.school = schoolId;
@@ -550,9 +451,6 @@ export const studentService = {
     return response.data;
   },
 
-  /**
-   * Get students by school
-   */
   getStudentsBySchool: async (schoolId: string, params?: any) => {
     const response = await schoolApi.get('/schools/students/', {
       params: { ...params, school: schoolId }
@@ -560,9 +458,6 @@ export const studentService = {
     return response.data;
   },
 
-  /**
-   * Get students by email
-   */
   getStudentsByEmail: async (email: string, params?: any) => {
     const response = await schoolApi.get('/schools/students/', {
       params: { ...params, email }
@@ -570,9 +465,6 @@ export const studentService = {
     return response.data;
   },
 
-  /**
-   * Get students by guardian email
-   */
   getStudentsByGuardianEmail: async (guardianEmail: string, params?: any) => {
     const response = await schoolApi.get('/schools/students/', {
       params: { ...params, guardian_email: guardianEmail }
@@ -580,17 +472,11 @@ export const studentService = {
     return response.data;
   },
 
-  /**
-   * Get student statistics
-   */
   getStudentStats: async (params?: any) => {
     const response = await schoolApi.get('/schools/students/stats/', { params });
     return response.data;
   },
 
-  /**
-   * Search students by query
-   */
   searchStudents: async (query: string, params?: any) => {
     const response = await schoolApi.get('/schools/students/search/', {
       params: { ...params, q: query }
@@ -604,49 +490,31 @@ export const studentService = {
 // ============================================
 
 export const teacherService = {
-  /**
-   * Get all teachers with optional filters
-   */
   getTeachers: async (params?: any) => {
     const response = await schoolApi.get('/schools/teachers/', { params });
     return response.data;
   },
 
-  /**
-   * Get a single teacher by ID
-   */
   getTeacher: async (id: number) => {
     const response = await schoolApi.get(`/schools/teachers/${id}/`);
     return response.data;
   },
 
-  /**
-   * Create a new teacher
-   */
   createTeacher: async (data: any) => {
     const response = await schoolApi.post('/schools/teachers/', data);
     return response.data;
   },
 
-  /**
-   * Update an existing teacher
-   */
   updateTeacher: async (id: number, data: any) => {
     const response = await schoolApi.put(`/schools/teachers/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Delete a teacher
-   */
   deleteTeacher: async (id: number) => {
     const response = await schoolApi.delete(`/schools/teachers/${id}/`);
     return response.data;
   },
 
-  /**
-   * Get teachers by department
-   */
   getTeachersByDepartment: async (department: string, schoolId?: string) => {
     const params: any = { department };
     if (schoolId) params.school = schoolId;
@@ -654,9 +522,6 @@ export const teacherService = {
     return response.data;
   },
 
-  /**
-   * Get teachers by school
-   */
   getTeachersBySchool: async (schoolId: string, params?: any) => {
     const response = await schoolApi.get('/schools/teachers/', {
       params: { ...params, school: schoolId }
@@ -664,9 +529,6 @@ export const teacherService = {
     return response.data;
   },
 
-  /**
-   * Get teachers by school code
-   */
   getTeachersBySchoolCode: async (schoolCode: string, params?: any) => {
     const response = await schoolApi.get('/schools/teachers/', {
       params: { ...params, school_code: schoolCode }
@@ -674,9 +536,6 @@ export const teacherService = {
     return response.data;
   },
 
-  /**
-   * Get teachers grouped by school
-   */
   getTeachersGroupedBySchool: async (schoolCode?: string) => {
     let url = '/schools/teachers/by-school/';
     
@@ -691,17 +550,11 @@ export const teacherService = {
     return response.data;
   },
 
-  /**
-   * Get teacher statistics
-   */
   getTeacherStats: async (params?: any) => {
     const response = await schoolApi.get('/schools/teachers/stats/', { params });
     return response.data;
   },
 
-  /**
-   * Search teachers by query
-   */
   searchTeachers: async (query: string, params?: any) => {
     const response = await schoolApi.get('/schools/teachers/search/', {
       params: { ...params, q: query }
@@ -715,49 +568,31 @@ export const teacherService = {
 // ============================================
 
 export const subjectService = {
-  /**
-   * Get all subjects with optional filters
-   */
   getSubjects: async (params?: any) => {
     const response = await schoolApi.get('/schools/subjects/', { params });
     return response.data;
   },
 
-  /**
-   * Get a single subject by ID
-   */
   getSubject: async (id: number) => {
     const response = await schoolApi.get(`/schools/subjects/${id}/`);
     return response.data;
   },
 
-  /**
-   * Create a new subject
-   */
   createSubject: async (data: any) => {
     const response = await schoolApi.post('/schools/subjects/', data);
     return response.data;
   },
 
-  /**
-   * Update an existing subject
-   */
   updateSubject: async (id: number, data: any) => {
     const response = await schoolApi.put(`/schools/subjects/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Delete a subject
-   */
   deleteSubject: async (id: number) => {
     const response = await schoolApi.delete(`/schools/subjects/${id}/`);
     return response.data;
   },
 
-  /**
-   * Get subjects by class
-   */
   getSubjectsByClass: async (className: string, schoolId?: string) => {
     const params: any = { student_class: className };
     if (schoolId) params.school = schoolId;
@@ -765,9 +600,6 @@ export const subjectService = {
     return response.data;
   },
 
-  /**
-   * Get subjects by teacher
-   */
   getSubjectsByTeacher: async (teacherId: number) => {
     const response = await schoolApi.get('/schools/subjects/', {
       params: { teacher: teacherId }
@@ -775,9 +607,6 @@ export const subjectService = {
     return response.data;
   },
 
-  /**
-   * Get subjects by school
-   */
   getSubjectsBySchool: async (schoolId: string, params?: any) => {
     const response = await schoolApi.get('/schools/subjects/', {
       params: { ...params, school: schoolId }
@@ -785,9 +614,6 @@ export const subjectService = {
     return response.data;
   },
 
-  /**
-   * Get subjects by school code
-   */
   getSubjectsBySchoolCode: async (schoolCode: string, params?: any) => {
     const response = await schoolApi.get('/schools/subjects/', {
       params: { ...params, school_code: schoolCode }
@@ -795,9 +621,6 @@ export const subjectService = {
     return response.data;
   },
 
-  /**
-   * Get subjects grouped by school
-   */
   getSubjectsGroupedBySchool: async (schoolCode?: string) => {
     let url = '/schools/subjects/by-school/';
     
@@ -812,9 +635,6 @@ export const subjectService = {
     return response.data;
   },
 
-  /**
-   * Search subjects by query
-   */
   searchSubjects: async (query: string, params?: any) => {
     const response = await schoolApi.get('/schools/subjects/search/', {
       params: { ...params, q: query }
@@ -828,17 +648,11 @@ export const subjectService = {
 // ============================================
 
 export const termService = {
-  /**
-   * Get all academic terms
-   */
   getTerms: async (params?: any) => {
     const response = await schoolApi.get('/schools/terms/', { params });
     return response.data;
   },
 
-  /**
-   * Get terms by school
-   */
   getTermsBySchool: async (schoolId: string) => {
     const response = await schoolApi.get('/schools/terms/', {
       params: { school: schoolId }
@@ -846,41 +660,26 @@ export const termService = {
     return response.data;
   },
 
-  /**
-   * Create a new academic term
-   */
   createTerm: async (data: any) => {
     const response = await schoolApi.post('/schools/terms/', data);
     return response.data;
   },
 
-  /**
-   * Get a single term by ID
-   */
   getTerm: async (id: number) => {
     const response = await schoolApi.get(`/schools/terms/${id}/`);
     return response.data;
   },
 
-  /**
-   * Update an existing term
-   */
   updateTerm: async (id: number, data: any) => {
     const response = await schoolApi.put(`/schools/terms/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Delete a term
-   */
   deleteTerm: async (id: number) => {
     const response = await schoolApi.delete(`/schools/terms/${id}/`);
     return response.data;
   },
 
-  /**
-   * Get the current academic term for a school
-   */
   getCurrentTerm: async (schoolId: string) => {
     const response = await schoolApi.get('/schools/terms/', {
       params: { school: schoolId, is_current: true }
@@ -894,57 +693,36 @@ export const termService = {
 // ============================================
 
 export const subscriptionService = {
-  /**
-   * Get all plans
-   */
   getPlans: async () => {
     const response = await schoolApi.get('/subscriptions/plans/');
     return response.data;
   },
 
-  /**
-   * Get a plan by ID
-   */
   getPlan: async (id: number) => {
     const response = await schoolApi.get(`/subscriptions/plans/${id}/`);
     return response.data;
   },
 
-  /**
-   * Get subscriptions
-   */
   getSubscriptions: async (params?: any) => {
     const response = await schoolApi.get('/subscriptions/', { params });
     return response.data;
   },
 
-  /**
-   * Create subscription
-   */
   createSubscription: async (data: any) => {
     const response = await schoolApi.post('/subscriptions/create/', data);
     return response.data;
   },
 
-  /**
-   * Get subscription by ID
-   */
   getSubscription: async (id: number) => {
     const response = await schoolApi.get(`/subscriptions/${id}/`);
     return response.data;
   },
 
-  /**
-   * Update subscription
-   */
   updateSubscription: async (id: number, data: any) => {
     const response = await schoolApi.put(`/subscriptions/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Check expiry for a school
-   */
   checkExpiry: async (schoolCode: string) => {
     const response = await schoolApi.get('/subscriptions/check-expiry/', {
       params: { school_code: schoolCode }
@@ -952,25 +730,16 @@ export const subscriptionService = {
     return response.data;
   },
 
-  /**
-   * Get payments
-   */
   getPayments: async (params?: any) => {
     const response = await schoolApi.get('/subscriptions/payments/', { params });
     return response.data;
   },
 
-  /**
-   * Create payment
-   */
   createPayment: async (data: any) => {
     const response = await schoolApi.post('/subscriptions/payments/create/', data);
     return response.data;
   },
 
-  /**
-   * Get invoices
-   */
   getInvoices: async (params?: any) => {
     const response = await schoolApi.get('/subscriptions/invoices/', { params });
     return response.data;
@@ -982,57 +751,36 @@ export const subscriptionService = {
 // ============================================
 
 export const systemService = {
-  /**
-   * Get system settings
-   */
   getSettings: async (params?: any) => {
     const response = await schoolApi.get('/system/settings/', { params });
     return response.data;
   },
 
-  /**
-   * Update system setting
-   */
   updateSetting: async (id: number, data: any) => {
     const response = await schoolApi.put(`/system/settings/${id}/`, data);
     return response.data;
   },
 
-  /**
-   * Bulk update settings
-   */
   bulkUpdateSettings: async (settings: any[]) => {
     const response = await schoolApi.post('/system/settings/bulk-update/', { settings });
     return response.data;
   },
 
-  /**
-   * Get activity logs
-   */
   getActivities: async (params?: any) => {
     const response = await schoolApi.get('/system/activities/', { params });
     return response.data;
   },
 
-  /**
-   * Get system alerts
-   */
   getAlerts: async (params?: any) => {
     const response = await schoolApi.get('/system/alerts/', { params });
     return response.data;
   },
 
-  /**
-   * Resolve alert
-   */
   resolveAlert: async (id: number) => {
     const response = await schoolApi.post(`/system/alerts/${id}/resolve/`);
     return response.data;
   },
 
-  /**
-   * Get feature flags
-   */
   getFeatures: async (params?: any) => {
     const response = await schoolApi.get('/system/features/', { params });
     return response.data;
@@ -1044,41 +792,26 @@ export const systemService = {
 // ============================================
 
 export const notificationService = {
-  /**
-   * Get notifications
-   */
   getNotifications: async (params?: any) => {
     const response = await schoolApi.get('/notifications/', { params });
     return response.data;
   },
 
-  /**
-   * Create notification
-   */
   createNotification: async (data: any) => {
     const response = await schoolApi.post('/notifications/create/', data);
     return response.data;
   },
 
-  /**
-   * Get notification by ID
-   */
   getNotification: async (id: number) => {
     const response = await schoolApi.get(`/notifications/${id}/`);
     return response.data;
   },
 
-  /**
-   * Delete notification
-   */
   deleteNotification: async (id: number) => {
     const response = await schoolApi.delete(`/notifications/${id}/`);
     return response.data;
   },
 
-  /**
-   * Mark notifications as read
-   */
   markAsRead: async (notificationIds?: number[], markAll?: boolean) => {
     const response = await schoolApi.post('/notifications/mark-read/', {
       notification_ids: notificationIds,
@@ -1087,25 +820,16 @@ export const notificationService = {
     return response.data;
   },
 
-  /**
-   * Get notification preferences
-   */
   getPreferences: async () => {
     const response = await schoolApi.get('/notifications/preferences/');
     return response.data;
   },
 
-  /**
-   * Update notification preferences
-   */
   updatePreferences: async (data: any) => {
     const response = await schoolApi.put('/notifications/preferences/', data);
     return response.data;
   },
 
-  /**
-   * Get notification templates
-   */
   getTemplates: async () => {
     const response = await schoolApi.get('/notifications/templates/');
     return response.data;
@@ -1113,14 +837,10 @@ export const notificationService = {
 };
 
 // ============================================
-// TESLA / PAYMENT SERVICES - Using paymentApi
+// PAYMENT SERVICES
 // ============================================
 
 export const paymentService = {
-  /**
-   * Get all Tesla transactions
-   * GET /api/payments/
-   */
   getTransactions: async (params?: any) => {
     try {
       const response = await paymentApi.get('/payments/', { params });
@@ -1131,10 +851,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Get a single Tesla transaction by ID
-   * GET /api/payments/{id}/
-   */
   getTransaction: async (id: number) => {
     try {
       const response = await paymentApi.get(`/payments/${id}/`);
@@ -1145,10 +861,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Create a new Tesla transaction
-   * POST /api/payments/create/
-   */
   createTransaction: async (data: any) => {
     try {
       console.log('[paymentService] Creating transaction with data:', data);
@@ -1162,10 +874,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Update a Tesla transaction
-   * PUT /api/payments/{id}/update/
-   */
   updateTransaction: async (id: number, data: any) => {
     try {
       const response = await paymentApi.put(`/payments/${id}/update/`, data);
@@ -1176,10 +884,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Delete a Tesla transaction
-   * DELETE /api/payments/{id}/
-   */
   deleteTransaction: async (id: number) => {
     try {
       const response = await paymentApi.delete(`/payments/${id}/`);
@@ -1190,10 +894,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Process a Tesla transaction (start, confirm, complete, fail, cancel)
-   * POST /api/payments/{id}/process/
-   */
   processTransaction: async (id: number, action: string, data?: any) => {
     try {
       const response = await paymentApi.post(`/payments/${id}/process/`, {
@@ -1207,10 +907,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Get Tesla transaction statistics
-   * GET /api/payments/stats/
-   */
   getTransactionStats: async (params?: any) => {
     try {
       const response = await paymentApi.get('/payments/stats/', { params });
@@ -1221,10 +917,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Get Tesla transactions by school
-   * GET /api/payments/school/{school_code}/
-   */
   getTransactionsBySchool: async (schoolCode: string) => {
     try {
       const response = await paymentApi.get(`/payments/school/${schoolCode}/`);
@@ -1237,124 +929,136 @@ export const paymentService = {
 };
 
 // ============================================
-// RESULT SERVICES - Updated with /api/report/ base path
+// RESULT SERVICES - With proper error handling
 // ============================================
 
 export const resultService = {
-  /**
-   * Get all results with optional filters
-   * GET /api/report/
-   */
   getResults: async (params?: any) => {
     const response = await schoolApi.get('/report/', { params });
     return response.data;
   },
 
-  /**
-   * Get a single result by ID
-   * GET /api/report/{result_id}/
-   */
   getResult: async (id: number) => {
     const response = await schoolApi.get(`/report/${id}/`);
     return response.data;
   },
 
-  /**
-   * Create a new result
-   * POST /api/report/create/
-   */
   createResult: async (data: any) => {
     const response = await schoolApi.post('/report/create/', data);
     return response.data;
   },
 
-  /**
-   * Update an existing result
-   * PUT /api/report/{result_id}/update/
-   */
   updateResult: async (id: number, data: any) => {
     const response = await schoolApi.put(`/report/${id}/update/`, data);
     return response.data;
   },
 
-  /**
-   * Delete a result
-   * DELETE /api/report/{result_id}/delete/
-   */
   deleteResult: async (id: number) => {
     const response = await schoolApi.delete(`/report/${id}/delete/`);
     return response.data;
   },
 
-  /**
-   * Publish results
-   * POST /api/report/publish/
-   */
   publishResults: async (data: { result_ids: number[]; publish: boolean }) => {
     const response = await schoolApi.post('/report/publish/', data);
     return response.data;
   },
 
-  /**
-   * Get single result PDF
-   * GET /api/report/pdf/single/{result_id}/
-   */
   getSingleResultPDF: async (resultId: number) => {
-    const response = await schoolApi.get(`/report/pdf/single/${resultId}/`, {
-      responseType: 'blob'
-    });
-    return response.data;
+    try {
+      const response = await schoolApi.get(`/report/pdf/single/${resultId}/`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('[resultService] getSingleResultPDF error:', error);
+      
+      if (error.response && error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const json = JSON.parse(text);
+          throw new Error(json.message || 'Failed to download PDF');
+        } catch (e) {
+          throw new Error('Failed to download PDF. Please try again.');
+        }
+      }
+      throw error;
+    }
   },
 
-  /**
-   * Get student results PDF
-   * GET /api/report/pdf/student/?student_id={student_id}&term_id={term_id}
-   */
   getStudentResultsPDF: async (params: { student_id: number; term_id?: number }) => {
-    const response = await schoolApi.get('/report/pdf/student/', {
-      params,
-      responseType: 'blob'
-    });
-    return response.data;
+    try {
+      const response = await schoolApi.get('/report/pdf/student/', {
+        params,
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('[resultService] getStudentResultsPDF error:', error);
+      
+      if (error.response && error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const json = JSON.parse(text);
+          throw new Error(json.message || 'Failed to download PDF');
+        } catch (e) {
+          throw new Error('Failed to download PDF. Please try again.');
+        }
+      }
+      throw error;
+    }
   },
 
-  /**
-   * Get bulk results PDF
-   * GET /api/report/pdf/bulk/?school_code={school_code}&term_id={term_id}&student_ids={ids}
-   */
   getBulkResultsPDF: async (params: { school_code: string; term_id?: number; student_ids?: string }) => {
-    const response = await schoolApi.get('/report/pdf/bulk/', {
-      params,
-      responseType: 'blob'
-    });
-    return response.data;
+    try {
+      const response = await schoolApi.get('/report/pdf/bulk/', {
+        params,
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('[resultService] getBulkResultsPDF error:', error);
+      
+      if (error.response && error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const json = JSON.parse(text);
+          throw new Error(json.message || 'Failed to download PDF');
+        } catch (e) {
+          throw new Error('Failed to download PDF. Please try again.');
+        }
+      }
+      throw error;
+    }
   },
 
-  /**
-   * Get bulk results Excel
-   * GET /api/report/excel/bulk/?school_code={school_code}&term_id={term_id}&student_ids={ids}
-   */
   getBulkResultsExcel: async (params: { school_code: string; term_id?: number; student_ids?: string }) => {
-    const response = await schoolApi.get('/report/excel/bulk/', {
-      params,
-      responseType: 'blob'
-    });
-    return response.data;
+    try {
+      const response = await schoolApi.get('/report/excel/bulk/', {
+        params,
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('[resultService] getBulkResultsExcel error:', error);
+      
+      if (error.response && error.response.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const json = JSON.parse(text);
+          throw new Error(json.message || 'Failed to download Excel');
+        } catch (e) {
+          throw new Error('Failed to download Excel. Please try again.');
+        }
+      }
+      throw error;
+    }
   },
 
-  /**
-   * Send single result email
-   * POST /api/report/email/single/
-   */
   sendSingleResultEmail: async (data: { result_id: number; email?: string; subject?: string; message?: string }) => {
     const response = await schoolApi.post('/report/email/single/', data);
     return response.data;
   },
 
-  /**
-   * Send bulk results email
-   * POST /api/report/email/bulk/
-   */
   sendBulkResultsEmail: async (data: { 
     school_code: string; 
     term_id?: number; 
@@ -1366,19 +1070,11 @@ export const resultService = {
     return response.data;
   },
 
-  /**
-   * Get student result summary
-   * GET /api/report/summary/?student_id={student_id}&term_id={term_id}
-   */
   getStudentResultSummary: async (params: { student_id: number; term_id?: number }) => {
     const response = await schoolApi.get('/report/summary/', { params });
     return response.data;
   },
 
-  /**
-   * Get results by student
-   * GET /api/report/?student={student_id}
-   */
   getResultsByStudent: async (studentId: number, termId?: number, schoolCode?: string) => {
     const params: any = { student: studentId };
     if (termId) params.term = termId;
@@ -1387,10 +1083,6 @@ export const resultService = {
     return response.data;
   },
 
-  /**
-   * Get results by subject
-   * GET /api/report/?subject={subject_id}
-   */
   getResultsBySubject: async (subjectId: number, termId?: number, schoolCode?: string) => {
     const params: any = { subject: subjectId };
     if (termId) params.term = termId;
@@ -1399,10 +1091,6 @@ export const resultService = {
     return response.data;
   },
 
-  /**
-   * Get results by school
-   * GET /api/report/?school_code={school_code}
-   */
   getResultsBySchool: async (schoolCode: string, params?: any) => {
     const response = await schoolApi.get('/report/', {
       params: { ...params, school_code: schoolCode }
@@ -1410,10 +1098,6 @@ export const resultService = {
     return response.data;
   },
 
-  /**
-   * Get results grouped by school
-   * GET /api/report/by-school/?school_code={school_code}
-   */
   getResultsBySchoolGrouped: async (schoolCode: string, termId?: number) => {
     const params: any = { school_code: schoolCode };
     if (termId) params.term = termId;
@@ -1421,19 +1105,11 @@ export const resultService = {
     return response.data;
   },
 
-  /**
-   * Get result statistics
-   * GET /api/report/stats/?school_code={school_code}
-   */
   getResultStats: async (params?: any) => {
     const response = await schoolApi.get('/report/stats/', { params });
     return response.data;
   },
 
-  /**
-   * Search results
-   * GET /api/report/search/?q={query}
-   */
   searchResults: async (query: string, params?: any) => {
     const response = await schoolApi.get('/report/search/', {
       params: { ...params, q: query }
@@ -1441,28 +1117,16 @@ export const resultService = {
     return response.data;
   },
 
-  /**
-   * Bulk create results
-   * POST /api/report/bulk-create/
-   */
   bulkCreateResults: async (data: any[]) => {
     const response = await schoolApi.post('/report/bulk-create/', data);
     return response.data;
   },
 
-  /**
-   * Get student statistics
-   * GET /api/report/student/{student_id}/statistics/
-   */
   getStudentStatistics: async (studentId: number) => {
     const response = await schoolApi.get(`/report/student/${studentId}/statistics/`);
     return response.data;
   },
 
-  /**
-   * Get result summaries
-   * GET /api/report/summaries/
-   */
   getResultSummaries: async (params?: any) => {
     const response = await schoolApi.get('/report/summaries/', { params });
     return response.data;
@@ -1470,13 +1134,10 @@ export const resultService = {
 };
 
 // ============================================
-// AUTH SERVICES (Direct API calls without interceptor)
+// AUTH SERVICES
 // ============================================
 
 export const authApi = {
-  /**
-   * Login user
-   */
   login: async (username: string, password: string) => {
     const response = await axios.post(`${API_BASE_URL}/accounts/login/`, {
       username,
@@ -1485,17 +1146,11 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Register user
-   */
   register: async (data: any) => {
     const response = await axios.post(`${API_BASE_URL}/accounts/register/`, data);
     return response.data;
   },
 
-  /**
-   * Refresh token
-   */
   refresh: async (refreshToken: string) => {
     const response = await axios.post(`${API_BASE_URL}/accounts/refresh/`, {
       refresh: refreshToken
@@ -1503,9 +1158,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Logout user
-   */
   logout: async (refreshToken: string) => {
     const response = await axios.post(
       `${API_BASE_URL}/accounts/logout/`,
@@ -1520,9 +1172,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Get user profile
-   */
   getProfile: async () => {
     const token = localStorage.getItem('access_token');
     const response = await axios.get(`${API_BASE_URL}/accounts/profile/`, {
@@ -1533,9 +1182,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Update user profile
-   */
   updateProfile: async (data: any) => {
     const token = localStorage.getItem('access_token');
     const response = await axios.put(`${API_BASE_URL}/accounts/profile/`, data, {
@@ -1546,9 +1192,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Request password reset
-   */
   requestPasswordReset: async (email: string) => {
     const response = await axios.post(`${API_BASE_URL}/accounts/password-reset/request/`, {
       email
@@ -1556,17 +1199,11 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Confirm password reset
-   */
   confirmPasswordReset: async (data: { token: string; new_password: string; confirm_password: string }) => {
     const response = await axios.post(`${API_BASE_URL}/accounts/password-reset/confirm/`, data);
     return response.data;
   },
 
-  /**
-   * Verify email
-   */
   verifyEmail: async (token: string) => {
     const response = await axios.get(`${API_BASE_URL}/accounts/verify-email/`, {
       params: { token }
@@ -1574,9 +1211,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Resend verification email
-   */
   resendVerification: async (email: string) => {
     const response = await axios.post(`${API_BASE_URL}/accounts/resend-verification/`, {
       email
@@ -1584,9 +1218,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Get user activity logs
-   */
   getActivityLogs: async () => {
     const token = localStorage.getItem('access_token');
     const response = await axios.get(`${API_BASE_URL}/accounts/activity-logs/`, {
@@ -1597,9 +1228,6 @@ export const authApi = {
     return response.data;
   },
 
-  /**
-   * Check email verification status
-   */
   checkVerificationStatus: async (email: string) => {
     const response = await axios.get(`${API_BASE_URL}/accounts/check-verification-status/`, {
       params: { email }

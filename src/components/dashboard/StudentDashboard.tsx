@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Award, TrendingUp, Calendar, Clock, Download, 
+  Award, TrendingUp, Clock, Download, 
   CheckCircle, BookOpen, BarChart3, User, School, 
   Hash, Loader2, AlertCircle, RefreshCw, ArrowRight,
-  FileText, GraduationCap, Eye, LogOut, Home,
-  ChevronRight, Users, Mail, Phone,
+  FileText, 
   Search,
   X,
-  Armchair,
   CircleCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -89,7 +87,7 @@ const getGradeColor = (grade: string): string => {
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, school, logout } = useAuth();
+  const { user, isAuthenticated, school } = useAuth();
 
   // ============================================
   // STATE MANAGEMENT
@@ -97,10 +95,8 @@ const StudentDashboard: React.FC = () => {
 
   // Data States
   const [studentData, setStudentData] = useState<Student | null>(null);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [publishedResults, setPublishedResults] = useState<Result[]>([]);
-  const [terms, setTerms] = useState<Term[]>([]);
   const [currentTerm, setCurrentTerm] = useState<Term | null>(null);
   
   // UI States
@@ -122,11 +118,8 @@ const StudentDashboard: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
-  const userRole = user?.role || '';
-  const userId = user?.id || null;
 
   // Calculate stats from published results
   const average = publishedResults.length > 0
@@ -247,7 +240,7 @@ const StudentDashboard: React.FC = () => {
         setStudentData(currentStudent);
         console.log('[StudentDashboard] Current student:', currentStudent);
       } else {
-        toast.warning('No student found for your account');
+        toast.error('No student found for your account');
       }
       
       // Fetch subjects
@@ -263,7 +256,6 @@ const StudentDashboard: React.FC = () => {
       } else if (Array.isArray(subjectsResponse)) {
         subjectData = subjectsResponse;
       }
-      setSubjects(subjectData);
       
       // Fetch results for the student
       if (currentStudent) {
@@ -310,7 +302,6 @@ const StudentDashboard: React.FC = () => {
             } else if (Array.isArray(termsResponse)) {
               termData = termsResponse;
             }
-            setTerms(termData);
             
             // Find current term
             const current = termData.find(t => t.is_current);
@@ -325,7 +316,7 @@ const StudentDashboard: React.FC = () => {
         }
       }
       
-      toast.success(`Loaded ${publishedResults.length} results`);
+      toast.success(`Loaded ${publishedResults.length} published results`);
       
     } catch (error: any) {
       console.error('[StudentDashboard] Error fetching data:', error);
@@ -361,10 +352,8 @@ const StudentDashboard: React.FC = () => {
   const handleClearSearch = () => {
     setSearchSchoolCode('');
     setStudentData(null);
-    setSubjects([]);
     setResults([]);
     setPublishedResults([]);
-    setTerms([]);
     setCurrentTerm(null);
     setCurrentSchoolInfo(null);
     setHasSearched(false);
@@ -417,15 +406,6 @@ const StudentDashboard: React.FC = () => {
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Failed to download report card');
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      toast.error('Failed to logout');
     }
   };
 
@@ -533,10 +513,10 @@ const StudentDashboard: React.FC = () => {
           ========================================== */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900">
-            Welcome back, {studentData?.first_name || user?.first_name || 'Student'}! <CircleCheck className='text-success'/>
+          <h1 className="text-2xl font-bold text-secondary-900 flex items-center gap-2">
+            Welcome back, {studentData?.first_name || user?.first_name || 'Student'}! 
+            <CircleCheck className="text-green-500 w-6 h-6" />
           </h1>
-          <h1>My Results</h1>
           <p className="text-secondary-500">
             Here's your academic overview
             {currentTerm && ` for ${currentTerm.name}`}

@@ -1,17 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { 
-  Building2, Users, UserCheck, CreditCard, TrendingUp, 
-  Calendar, Download, Search, Filter, Eye, MoreVertical,
+  Building2, Users, UserCheck, 
+  Calendar, Download, Search, Eye,
   DollarSign, School, AlertCircle, CheckCircle, XCircle,
-  Clock, BarChart3, ArrowUp, ArrowDown, Zap, Shield,
-  Activity, PieChart, Server, Loader2, RefreshCw,
-  Hash, Copy, Mail, Phone, Home, BarChart, X
+  Clock, ArrowUp, Shield,
+  Activity, Loader2, RefreshCw,
+  X
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
-  BarChart as ReBarChart,
   Bar,
   XAxis,
   YAxis,
@@ -26,8 +23,12 @@ import {
   AreaChart,
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
-import { schoolService, subscriptionService, systemService, studentService } from '../../api/schoolApi';
+import { schoolService, subscriptionService, paymentService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
+
+// ============================================
+// INTERFACES
+// ============================================
 
 interface School {
   id: number;
@@ -49,22 +50,6 @@ interface School {
   last_active: string;
 }
 
-interface Subscription {
-  id: number;
-  school: number;
-  school_name: string;
-  school_code: string;
-  plan: number;
-  plan_name: string;
-  plan_display_name: string;
-  status: string;
-  days_remaining: number;
-  is_active: boolean;
-  is_trial: boolean;
-  is_expiring_soon: boolean;
-  current_period_end: string;
-}
-
 interface ActivityLog {
   id: number;
   user: number;
@@ -75,6 +60,31 @@ interface ActivityLog {
   action: string;
   description: string;
   created_at: string;
+  ip_address?: string;
+  user_agent?: string;
+}
+
+interface Transaction {
+  id: number;
+  transaction_code: string;
+  school: number;
+  school_code: string;
+  school_name: string;
+  admin_email: string;
+  admin_name: string;
+  admin_phone: string;
+  plan: number;
+  plan_name: string;
+  plan_price: number;
+  currency: string;
+  amount: number;
+  formatted_amount?: string;
+  payment_method: string;
+  telecom_provider: string;
+  transaction_reference: string;
+  status: string;
+  created_at: string;
+  completed_at: string;
 }
 
 interface SystemStats {
@@ -89,12 +99,18 @@ interface SystemStats {
   growth_rate: number;
 }
 
+// ============================================
+// MAIN COMPONENT
+// ============================================
+
 const SuperAdminDashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getActivityLogs } = useAuth();
+  
+  // ============================================
+  // STATE MANAGEMENT
+  // ============================================
   
   const [schools, setSchools] = useState<School[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [stats, setStats] = useState<SystemStats>({
     total_schools: 0,
@@ -130,36 +146,168 @@ const SuperAdminDashboard: React.FC = () => {
 
   const COLORS = ['#3b82f6', '#22c55e', '#8b5cf6', '#f59e0b'];
 
-  // Fetch all data
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+
+  const getMonthName = (monthIndex: number): string => {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[monthIndex] || 'Jan';
+  };
+
+  const calculateRevenueByMonth = (transactionsData: Transaction[]): Record<string, number> => {
+    const revenueByMonth: Record<string, number> = {};
+    
+    // Initialize all months with 0
+    for (let i = 0; i < 12; i++) {
+      const monthName = getMonthName(i);
+      revenueByMonth[monthName] = 0;
+    }
+
+    // Add revenue from ALL transactions to each month
+    transactionsData.forEach(t => {
+      const date = new Date(t.created_at || t.completed_at);
+      const monthIndex = date.getMonth();
+      const monthName = getMonthName(monthIndex);
+      const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+      revenueByMonth[monthName] = (revenueByMonth[monthName] || 0) + amount;
+    });
+
+    return revenueByMonth;
+  };
+
+  // ============================================
+  // FETCH ACTIVITY LOGS - USING AUTH CONTEXT
+  // ============================================
+
+  const fetchActivities = useCallback(async () => {
+    try {
+      console.log('[SuperAdminDashboard] Fetching activity logs...');
+      
+      const response = await getActivityLogs();
+      
+      console.log('[SuperAdminDashboard] Activity logs raw response:', response);
+      
+      let activityData: ActivityLog[] = [];
+      
+      if (Array.isArray(response)) {
+        activityData = response;
+        console.log('[SuperAdminDashboard] Response is array, length:', activityData.length);
+      } else if (response && typeof response === 'object') {
+        if (response.results && Array.isArray(response.results)) {
+          activityData = response.results;
+          console.log('[SuperAdminDashboard] Found array in response.results, length:', activityData.length);
+        } else if (response.data && Array.isArray(response.data)) {
+          activityData = response.data;
+          console.log('[SuperAdminDashboard] Found array in response.data, length:', activityData.length);
+        } else if (response.status === 'success' && response.data && Array.isArray(response.data)) {
+          activityData = response.data;
+          console.log('[SuperAdminDashboard] Found array in success.data, length:', activityData.length);
+        } else {
+          let found = false;
+          for (const key of Object.keys(response)) {
+            if (Array.isArray(response[key]) && response[key].length > 0) {
+              if (response[key].length > 0 && typeof response[key][0] === 'object') {
+                activityData = response[key];
+                console.log(`[SuperAdminDashboard] Found array in response.${key}, length:`, activityData.length);
+                found = true;
+                break;
+              }
+            }
+          }
+          
+          if (!found && response.id !== undefined && response.action !== undefined) {
+            activityData = [response];
+            console.log('[SuperAdminDashboard] Response is single activity object, converted to array');
+          }
+        }
+      }
+      
+      // Filter activities for the current user if not super admin
+      if (user?.role !== 'super_admin' && user?.id) {
+        activityData = activityData.filter(a => a.user === user.id);
+        console.log('[SuperAdminDashboard] Filtered activities for user:', user.id, 'count:', activityData.length);
+      }
+      
+      // Ensure each item has required fields
+      activityData = activityData.filter(item => 
+        item && typeof item === 'object' && item.id !== undefined
+      );
+      
+      // Sort activities by created_at descending (newest first)
+      activityData.sort((a, b) => {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return dateB - dateA;
+      });
+      
+      console.log('[SuperAdminDashboard] Final processed activities:', activityData);
+      setActivities(activityData);
+      
+      if (activityData.length === 0) {
+        console.log('[SuperAdminDashboard] No activities found');
+      }
+      
+    } catch (error: any) {
+      console.error('[SuperAdminDashboard] Failed to fetch activities:', error);
+      
+      let errorMessage = 'Failed to load activity logs';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
+      setActivities([]);
+    }
+  }, [getActivityLogs, user?.id, user?.role]);
+
+  // ============================================
+  // FETCH ALL DATA
+  // ============================================
+
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     setSearchError(null);
     
     try {
-      const params: any = { page_size: 100 };
+      const params: any = { page_size: 1000 };
 
-      // If searching by school code
       if (searchSchoolCode && searchSchoolCode.trim() !== '') {
         params.school_code = searchSchoolCode.trim().toUpperCase();
         setHasSearched(true);
       }
 
-      // Fetch schools
+      // Fetch ALL schools
       const schoolsResponse = await schoolService.getSchools(params);
-      const schoolData = schoolsResponse.results || schoolsResponse;
+      const schoolData = schoolsResponse.results || schoolsResponse || [];
       setSchools(schoolData);
 
-      // Fetch subscriptions
-      const subsResponse = await subscriptionService.getSubscriptions({ page_size: 100 });
-      const subData = subsResponse.results || subsResponse;
-      setSubscriptions(subData);
+      // Fetch ALL subscriptions
+      const subsResponse = await subscriptionService.getSubscriptions({ page_size: 1000 });
+      const subData = subsResponse.results || subsResponse || [];
+
+      // Fetch ALL transactions
+      const transactionsResponse = await paymentService.getTransactions({ page_size: 1000 });
+      let transactionData: Transaction[] = transactionsResponse.results || transactionsResponse || [];
+      
+      // Ensure amounts are numbers
+      transactionData = transactionData.map(t => ({
+        ...t,
+        amount: typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0,
+        plan_price: typeof t.plan_price === 'number' ? t.plan_price : parseFloat(String(t.plan_price)) || 0,
+      }));
 
       // Fetch activity logs
-      const activityResponse = await systemService.getActivities({ page_size: 20 });
-      const activityData = activityResponse.results || activityResponse;
-      setActivities(activityData);
+      await fetchActivities();
 
-      // Calculate stats
+      // Calculate stats from ALL data
       const activeSchools = schoolData.filter((s: School) => s.status === 'active').length;
       const expiredSchools = schoolData.filter((s: School) => s.status === 'expired').length;
       const suspendedSchools = schoolData.filter((s: School) => s.status === 'suspended').length;
@@ -167,13 +315,28 @@ const SuperAdminDashboard: React.FC = () => {
       const totalStudents = schoolData.reduce((acc: number, s: School) => acc + (s.total_students || 0), 0);
       const totalTeachers = schoolData.reduce((acc: number, s: School) => acc + (s.total_teachers || 0), 0);
 
-      // Calculate revenue (simulated from subscriptions)
-      const monthlyRevenue = subData.reduce((acc: number, s: any) => {
-        if (s.plan_name === 'starter') return acc + 15000;
-        if (s.plan_name === 'professional') return acc + 35000;
-        if (s.plan_name === 'enterprise') return acc + 75000;
-        return acc + 0;
+      // Calculate revenue from ALL transactions
+      const monthlyRevenue = transactionData.reduce((acc: number, t: Transaction) => {
+        const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        return acc + amount;
       }, 0);
+
+      const totalRevenue = transactionData.reduce((acc: number, t: Transaction) => {
+        const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        return acc + amount;
+      }, 0);
+
+      // Calculate growth rate from transaction data
+      const revenueByMonth = calculateRevenueByMonth(transactionData);
+      const monthKeys = Object.keys(revenueByMonth);
+      const lastMonthIndex = monthKeys.length - 1;
+      const prevMonthIndex = lastMonthIndex - 1;
+      
+      const currentRevenue = revenueByMonth[monthKeys[lastMonthIndex]] || 0;
+      const previousRevenue = revenueByMonth[monthKeys[prevMonthIndex]] || 0;
+      const growthRate = previousRevenue > 0 
+        ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 
+        : 12.5;
 
       setStats({
         total_schools: schoolData.length,
@@ -183,11 +346,11 @@ const SuperAdminDashboard: React.FC = () => {
         total_students: totalStudents,
         total_teachers: totalTeachers,
         monthly_revenue: monthlyRevenue,
-        total_revenue: monthlyRevenue * 12,
-        growth_rate: 12.5,
+        total_revenue: totalRevenue,
+        growth_rate: Math.round(growthRate * 100) / 100,
       });
 
-      // Calculate plan distribution
+      // Calculate plan distribution from ALL subscriptions
       const trial = subData.filter((s: any) => s.plan_name === 'trial').length;
       const starter = subData.filter((s: any) => s.plan_name === 'starter').length;
       const professional = subData.filter((s: any) => s.plan_name === 'professional').length;
@@ -200,12 +363,17 @@ const SuperAdminDashboard: React.FC = () => {
         { name: 'Enterprise', value: enterprise },
       ]);
 
-      // Generate revenue data for chart
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-      const revenueChartData = months.map((month, idx) => ({
+      // Generate revenue data for chart - full year from ALL transactions
+      const revenueByMonthData = calculateRevenueByMonth(transactionData);
+      const revenueChartData = Object.entries(revenueByMonthData).map(([month, revenue]) => ({
         month,
-        revenue: monthlyRevenue * (0.6 + (idx / 6) * 0.4),
-        subscriptions: subData.length * (0.5 + (idx / 6) * 0.5),
+        revenue: Math.round(revenue),
+        transactions: transactionData.filter(t => {
+          const date = new Date(t.created_at);
+          const monthIndex = date.getMonth();
+          const subMonth = getMonthName(monthIndex);
+          return subMonth === month;
+        }).length,
       }));
       setRevenueData(revenueChartData);
 
@@ -220,14 +388,21 @@ const SuperAdminDashboard: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [searchSchoolCode]);
+  }, [searchSchoolCode, fetchActivities]);
 
-  // Load data on mount
+  // ============================================
+  // LOAD DATA ON MOUNT
+  // ============================================
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchAllData();
     }
   }, [isAuthenticated, fetchAllData]);
+
+  // ============================================
+  // HANDLERS
+  // ============================================
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,16 +420,9 @@ const SuperAdminDashboard: React.FC = () => {
     fetchAllData();
   };
 
-  // Filter schools (for display)
-  const filteredSchools = schools.filter(school => {
-    const matchesSearch = school.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (school.admin_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          school.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (school.school_code || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesPlan = filterPlan === 'all' || school.plan === filterPlan;
-    const matchesStatus = filterStatus === 'all' || school.status === filterStatus;
-    return matchesSearch && matchesPlan && matchesStatus;
-  });
+  // ============================================
+  // UTILITY FUNCTIONS
+  // ============================================
 
   const getPlanColor = (plan: string): string => {
     const colors: Record<string, string> = {
@@ -307,13 +475,45 @@ const SuperAdminDashboard: React.FC = () => {
     });
   };
 
+  const formatDateTime = (dateString: string): string => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const formatCurrency = (amount: number): string => {
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      return 'TZS 0';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'TZS',
       minimumFractionDigits: 0,
     }).format(amount);
   };
+
+  // ============================================
+  // FILTER SCHOOLS
+  // ============================================
+
+  const filteredSchools = schools.filter(school => {
+    const matchesSearch = school.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (school.admin_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          school.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (school.school_code || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesPlan = filterPlan === 'all' || school.plan === filterPlan;
+    const matchesStatus = filterStatus === 'all' || school.status === filterStatus;
+    return matchesSearch && matchesPlan && matchesStatus;
+  });
+
+  // ============================================
+  // EXPORT REPORT
+  // ============================================
 
   const handleExportReport = async () => {
     setIsExporting(true);
@@ -352,7 +552,10 @@ const SuperAdminDashboard: React.FC = () => {
     }
   };
 
-  // If not authenticated
+  // ============================================
+  // RENDER
+  // ============================================
+
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -376,7 +579,9 @@ const SuperAdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ==========================================
+          HEADER
+          ========================================== */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-secondary-900 flex items-center gap-2">
@@ -384,6 +589,11 @@ const SuperAdminDashboard: React.FC = () => {
             System Dashboard
           </h1>
           <p className="text-secondary-500">Full overview of all schools and system performance</p>
+          {user && (
+            <p className="text-xs text-secondary-400 mt-1">
+              Logged in as: {user.email} ({user.role})
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button 
@@ -413,7 +623,9 @@ const SuperAdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Search by School Code */}
+      {/* ==========================================
+          SEARCH BY SCHOOL CODE
+          ========================================== */}
       <div className="bg-white rounded-xl border border-secondary-200 p-4">
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
           <div className="flex-1 w-full">
@@ -481,7 +693,9 @@ const SuperAdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* ==========================================
+          STATS CARDS
+          ========================================== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl border border-secondary-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
@@ -574,13 +788,15 @@ const SuperAdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Charts */}
+      {/* ==========================================
+          CHARTS
+          ========================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl border border-secondary-200 p-6">
           <h3 className="font-semibold text-secondary-900 mb-4">Revenue & Subscriptions</h3>
-          {revenueData.length === 0 ? (
+          {revenueData.length === 0 || revenueData.every(d => d.revenue === 0) ? (
             <div className="flex items-center justify-center h-[300px] text-secondary-400">
-              <p>No data available</p>
+              <p>No transaction data available</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
@@ -595,10 +811,10 @@ const SuperAdminDashboard: React.FC = () => {
                 <XAxis dataKey="month" stroke="#94a3b8" />
                 <YAxis yAxisId="left" stroke="#94a3b8" />
                 <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" />
-                <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
                 <Legend />
                 <Area yAxisId="left" type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#colorRevenue)" strokeWidth={2} name="Revenue" />
-                <Bar yAxisId="right" dataKey="subscriptions" fill="#8b5cf6" name="Subscriptions" />
+                <Bar yAxisId="right" dataKey="transactions" fill="#8b5cf6" name="Transactions" />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -623,7 +839,7 @@ const SuperAdminDashboard: React.FC = () => {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {planDistribution.map((entry, index) => (
+                    {planDistribution.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -643,18 +859,32 @@ const SuperAdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Recent Activity */}
+      {/* ==========================================
+          RECENT ACTIVITY
+          ========================================== */}
       <div className="bg-white rounded-xl border border-secondary-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-secondary-900">Recent System Activity</h3>
-          <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-            View All
+          <h3 className="font-semibold text-secondary-900">
+            Recent System Activity
+            {user && (
+              <span className="text-xs font-normal text-secondary-400 ml-2">
+                for {user.email}
+              </span>
+            )}
+          </h3>
+          <button 
+            onClick={fetchActivities}
+            className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Refresh
           </button>
         </div>
         {activities.length === 0 ? (
           <div className="text-center py-8 text-secondary-400">
             <Activity className="w-8 h-8 mx-auto mb-2 text-secondary-300" />
-            <p className="text-sm">No recent activity</p>
+            <p className="text-sm">No recent activity for your account</p>
+            <p className="text-xs text-secondary-400 mt-1">Activities will appear here as you use the system</p>
           </div>
         ) : (
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -665,6 +895,9 @@ const SuperAdminDashboard: React.FC = () => {
                   activity.action_type === 'subscription' ? 'bg-green-500' :
                   activity.action_type === 'create' ? 'bg-blue-500' :
                   activity.action_type === 'delete' ? 'bg-red-500' :
+                  activity.action_type === 'update' ? 'bg-yellow-500' :
+                  activity.action_type === 'login' ? 'bg-indigo-500' :
+                  activity.action_type === 'logout' ? 'bg-gray-500' :
                   'bg-green-500'
                 }`} />
                 <div className="flex-1 min-w-0">
@@ -676,17 +909,39 @@ const SuperAdminDashboard: React.FC = () => {
                       <p className="text-sm text-secondary-600">{activity.description || activity.action}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-secondary-400 mt-1">
-                    {formatDate(activity.created_at)} • {activity.username || 'System'}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <Clock className="w-3 h-3 text-secondary-400" />
+                    <span className="text-xs text-secondary-400">
+                      {formatDateTime(activity.created_at)}
+                    </span>
+                    {activity.username && (
+                      <>
+                        <span className="text-xs text-secondary-400">•</span>
+                        <span className="text-xs text-secondary-400">{activity.username}</span>
+                      </>
+                    )}
+                    {activity.ip_address && (
+                      <>
+                        <span className="text-xs text-secondary-400">•</span>
+                        <span className="text-xs text-secondary-400">IP: {activity.ip_address}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
+        {activities.length > 0 && (
+          <div className="mt-3 text-center text-xs text-secondary-400">
+            Showing {activities.length} recent activities
+          </div>
+        )}
       </div>
 
-      {/* All Schools Table */}
+      {/* ==========================================
+          ALL SCHOOLS TABLE
+          ========================================== */}
       <div className="bg-white rounded-xl border border-secondary-200 overflow-hidden">
         <div className="p-4 border-b border-secondary-200 flex items-center justify-between flex-wrap gap-4">
           <h3 className="font-semibold text-secondary-900">

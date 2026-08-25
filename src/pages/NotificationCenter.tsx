@@ -1,12 +1,10 @@
 // src/pages/NotificationCenter.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Bell, CheckCircle, XCircle, AlertCircle, Clock,
-  Loader2, RefreshCw, Mail, FileText, DollarSign,
-  School, Users, BookOpen, Calendar, TrendingUp,
-  Check, X, Filter, Search, ChevronDown,
-  ChevronRight,
-  ChevronLeft
+  Bell, AlertCircle, Clock,
+  Loader2, RefreshCw, FileText, DollarSign,
+  School, Users, BookOpen, Calendar,
+  Check, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../api/schoolApi';
@@ -26,7 +24,7 @@ interface Notification {
 }
 
 const NotificationCenter: React.FC = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);

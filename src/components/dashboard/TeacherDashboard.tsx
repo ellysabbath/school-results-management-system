@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, BookOpen, ClipboardList, Clock, TrendingUp, Award, 
-  Calendar, CheckCircle, XCircle, School, Hash, Loader2,
+  Calendar, CheckCircle, School, Hash, Loader2,
   AlertCircle, RefreshCw, ArrowRight, User, BarChart,
-  FileText, GraduationCap, Plus, Eye, Edit,
+  Plus,
   Search,
   X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { studentService, subjectService, teacherService, resultService, schoolService } from '../../api/schoolApi';
+import { studentService, subjectService, resultService, schoolService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 
 // ============================================
@@ -36,15 +36,6 @@ interface Subject {
   school: number;
 }
 
-interface Teacher {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  department: string;
-  school: number;
-}
-
 interface Result {
   id: number;
   student: number;
@@ -59,30 +50,12 @@ interface Result {
 }
 
 // ============================================
-// GRADE COLOR HELPER
-// ============================================
-
-const getGradeColor = (grade: string): string => {
-  const colors: Record<string, string> = {
-    'A': 'bg-green-100 text-green-700',
-    'B+': 'bg-blue-100 text-blue-700',
-    'B': 'bg-blue-50 text-blue-600',
-    'C+': 'bg-yellow-100 text-yellow-700',
-    'C': 'bg-yellow-50 text-yellow-600',
-    'D': 'bg-orange-100 text-orange-700',
-    'E': 'bg-red-50 text-red-600',
-    'F': 'bg-red-100 text-red-700',
-  };
-  return colors[grade] || 'bg-gray-100 text-gray-500';
-};
-
-// ============================================
 // MAIN COMPONENT
 // ============================================
 
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, school } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   // ============================================
   // STATE MANAGEMENT
@@ -90,10 +63,8 @@ const TeacherDashboard: React.FC = () => {
 
   // Data States
   const [students, setStudents] = useState<Student[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [teacherSubjects, setTeacherSubjects] = useState<Subject[]>([]);
   const [results, setResults] = useState<Result[]>([]);
-  const [teacherInfo, setTeacherInfo] = useState<Teacher | null>(null);
   
   // UI States
   const [isLoading, setIsLoading] = useState(false);
@@ -118,9 +89,7 @@ const TeacherDashboard: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
-  const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
   const userId = user?.id || null;
 
   // Calculate stats
@@ -128,9 +97,6 @@ const TeacherDashboard: React.FC = () => {
   const totalSubjects = teacherSubjects.length;
   const pendingResults = results.filter(r => !r.is_published).length;
   const publishedResults = results.filter(r => r.is_published).length;
-  const averageScore = results.length > 0 
-    ? results.reduce((sum, r) => sum + (r.percentage || 0), 0) / results.length 
-    : 0;
 
   // ============================================
   // FETCH MY SCHOOL BY ADMIN EMAIL
@@ -230,7 +196,6 @@ const TeacherDashboard: React.FC = () => {
       } else if (Array.isArray(subjectsResponse)) {
         subjectData = subjectsResponse;
       }
-      setSubjects(subjectData);
       
       // Filter subjects for this teacher (if teacher is assigned)
       let teacherSubjectData: Subject[] = [];
@@ -322,7 +287,6 @@ const TeacherDashboard: React.FC = () => {
   const handleClearSearch = () => {
     setSearchSchoolCode('');
     setStudents([]);
-    setSubjects([]);
     setTeacherSubjects([]);
     setResults([]);
     setCurrentSchoolInfo(null);

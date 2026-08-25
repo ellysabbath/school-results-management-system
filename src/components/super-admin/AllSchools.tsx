@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { 
-  Search, Filter, Eye, MoreVertical, Download, 
+  Search, Eye, 
   ChevronLeft, ChevronRight, Building2, Mail, Phone,
   CheckCircle, XCircle, AlertCircle, Clock, Loader2,
   PlusCircle, Edit, Trash2, Hash, Users, BookOpen,
@@ -41,7 +41,6 @@ interface SchoolStats {
 }
 
 const AllSchools: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);

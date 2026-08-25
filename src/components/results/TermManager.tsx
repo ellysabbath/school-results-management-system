@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Plus, Search, Edit, Trash2, Calendar, Clock, 
+  Plus, Search, Edit, Trash2, Calendar,
   Loader2, User, AlertCircle, RefreshCw, X,
-  ChevronLeft, ChevronRight, Filter, Building2,
-  School, Hash, CheckCircle, XCircle, Save,
-  BookOpen, FileText, ChevronDown, ChevronUp
+  ChevronLeft, ChevronRight,
+  School, Hash, Save
 } from 'lucide-react';
 import { termService, schoolService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
@@ -28,14 +27,7 @@ interface Term {
   created_at: string;
 }
 
-interface SchoolData {
-  id: number;
-  name: string;
-  school_code: string;
-  email: string;
-  phone: string;
-  status: string;
-}
+
 
 // ============================================
 // MAIN COMPONENT
@@ -51,11 +43,9 @@ const TermManager: React.FC = () => {
   // Data States
   const [terms, setTerms] = useState<Term[]>([]);
   const [filteredTerms, setFilteredTerms] = useState<Term[]>([]);
-  const [schoolInfo, setSchoolInfo] = useState<SchoolData | null>(null);
   
   // UI States
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingSchool, setIsLoadingSchool] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
@@ -104,7 +94,6 @@ const TermManager: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
   const userEmail = user?.email || '';
 
@@ -122,7 +111,6 @@ const TermManager: React.FC = () => {
       return;
     }
 
-    setIsLoadingSchool(true);
     setSearchError(null);
 
     try {
@@ -159,8 +147,6 @@ const TermManager: React.FC = () => {
     } catch (error: any) {
       console.error('[TermManager] Error fetching my school:', error);
       toast.error(error.response?.data?.message || 'Failed to load your school');
-    } finally {
-      setIsLoadingSchool(false);
     }
   }, [userEmail]);
 

@@ -11,7 +11,8 @@ import {
   EyeOff,
   Loader2,
   Shield,
-  Key
+  Key,
+  GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -98,7 +99,10 @@ const ResetPasswordConfirm: React.FC = () => {
       [e.target.name]: e.target.value
     });
     setError('');
-    setSuccess('');
+    // Reset success to false when user starts typing again
+    if (success) {
+      setSuccess(false);
+    }
   };
 
   return (
@@ -108,7 +112,7 @@ const ResetPasswordConfirm: React.FC = () => {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded-full shadow-lg">
-              <Key className="w-10 h-10 text-white" />
+              <GraduationCap className="w-10 h-10 text-white" />
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Badilisha Nenosiri</h1>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
-  ArrowLeft, Download, Printer, Share2, Calendar, Award, TrendingUp,
+  ArrowLeft, Download, Printer, Share2, Award,
   School, Hash, Loader2, AlertCircle, RefreshCw, ArrowRight,
-  User, BookOpen, FileText, CheckCircle, XCircle,
+  User, FileText,
   X,
   Search
 } from 'lucide-react';
@@ -97,8 +97,6 @@ const ReportCard: React.FC = () => {
 
   // Data States
   const [studentData, setStudentData] = useState<Student | null>(null);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [results, setResults] = useState<Result[]>([]);
   const [publishedResults, setPublishedResults] = useState<Result[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [currentTerm, setCurrentTerm] = useState<Term | null>(null);
@@ -123,7 +121,6 @@ const ReportCard: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
 
@@ -251,23 +248,8 @@ const ReportCard: React.FC = () => {
         setStudentData(currentStudent);
         console.log('[ReportCard] Current student:', currentStudent);
       } else {
-        toast.warning('No student found for this ID');
+        toast.error('No student found for this ID');
       }
-      
-      // Fetch subjects
-      const subjectsResponse = await subjectService.getSubjects({
-        school_code: schoolCode,
-        page_size: 100
-      });
-      console.log('[ReportCard] Subjects response:', subjectsResponse);
-      
-      let subjectData: Subject[] = [];
-      if (subjectsResponse.results) {
-        subjectData = subjectsResponse.results;
-      } else if (Array.isArray(subjectsResponse)) {
-        subjectData = subjectsResponse;
-      }
-      setSubjects(subjectData);
       
       // Fetch terms
       if (userSchoolId) {
@@ -313,6 +295,19 @@ const ReportCard: React.FC = () => {
           resultData = resultsResponse.data;
         }
         
+        // Fetch subjects to get subject names
+        const subjectsResponse = await subjectService.getSubjects({
+          school_code: schoolCode,
+          page_size: 100
+        });
+        
+        let subjectData: Subject[] = [];
+        if (subjectsResponse.results) {
+          subjectData = subjectsResponse.results;
+        } else if (Array.isArray(subjectsResponse)) {
+          subjectData = subjectsResponse;
+        }
+        
         // Add subject names and term names to results
         const resultsWithNames = resultData.map(r => {
           const subject = subjectData.find(s => s.id === r.subject);
@@ -324,14 +319,12 @@ const ReportCard: React.FC = () => {
           };
         });
         
-        setResults(resultsWithNames);
-        
         // Filter published results
         const published = resultsWithNames.filter(r => r.is_published);
         setPublishedResults(published);
+        
+        toast.success(`Loaded ${published.length} published results`);
       }
-      
-      toast.success(`Loaded ${publishedResults.length} published results`);
       
     } catch (error: any) {
       console.error('[ReportCard] Error fetching data:', error);
@@ -367,8 +360,6 @@ const ReportCard: React.FC = () => {
   const handleClearSearch = () => {
     setSearchSchoolCode('');
     setStudentData(null);
-    setSubjects([]);
-    setResults([]);
     setPublishedResults([]);
     setTerms([]);
     setCurrentTerm(null);
@@ -582,14 +573,14 @@ const ReportCard: React.FC = () => {
             </button>
           )}
           <button 
-            onClick={() => toast.info('Share feature coming soon')}
+            onClick={() => toast('Share feature coming soon', { icon: '🔗' })}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
           >
             <Share2 className="w-4 h-4" />
             Share
           </button>
           <button 
-            onClick={() => toast.info('Print feature coming soon')}
+            onClick={() => toast('Print feature coming soon', { icon: '🖨️' })}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
           >
             <Printer className="w-4 h-4" />

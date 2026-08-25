@@ -3,10 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Building2, Mail, Phone, MapPin, 
   Users, UserCheck, BookOpen, ClipboardList,
-  Calendar, Edit, MoreVertical, Download,
+  Calendar, Edit,
   CheckCircle, XCircle, AlertCircle, Clock,
-  DollarSign, TrendingUp, Award, BarChart3,
-  Loader2
+  Loader2, BarChart3
 } from 'lucide-react';
 import { schoolService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
@@ -96,15 +95,6 @@ const SchoolDetails: React.FC = () => {
     return labels[plan] || plan;
   };
 
-  const getStatusColor = (status: string): string => {
-    const colors: Record<string, string> = {
-      active: 'bg-green-100 text-green-700',
-      expired: 'bg-red-100 text-red-700',
-      suspended: 'bg-yellow-100 text-yellow-700',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-700';
-  };
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'active':
@@ -162,6 +152,14 @@ const SchoolDetails: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const handleSendReminder = () => {
+    toast.success('Reminder sent to school admin successfully!');
+  };
+
+  const handleManageSubscription = () => {
+    toast.success('Subscription management opened');
   };
 
   // Loading state
@@ -245,13 +243,13 @@ const SchoolDetails: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => toast.info('Reminder sent to school admin')}
+            onClick={handleSendReminder}
             className="px-3 py-1.5 bg-white border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm"
           >
             Send Reminder
           </button>
           <button
-            onClick={() => toast.info('Subscription management opened')}
+            onClick={handleManageSubscription}
             className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
           >
             Manage Subscription

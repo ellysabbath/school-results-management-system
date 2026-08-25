@@ -10,14 +10,10 @@ import {
   MapPin,
   UserPlus2Icon,
   Award,
-  BarChart3,
-  FileText,
   Users,
-  BookOpen,
   Smartphone,
   Lock,
   TrendingUp,
-  Calendar,
   ClipboardList,
   Star
 } from 'lucide-react';

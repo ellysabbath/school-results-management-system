@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, ArrowLeft, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Mail, ArrowLeft, AlertCircle, CheckCircle, Loader2, GraduationCap } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -54,11 +54,14 @@ const ForgotPassword: React.FC = () => {
       <div className="w-full max-w-md animate-slide-up">
         <div className="bg-white rounded-2xl shadow-xl border border-secondary-200 p-8">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-500/20">
-              <Mail className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+              <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-secondary-900">Forgot Password</h1>
-            <p className="text-secondary-500 mt-1">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <h1 className="text-2xl font-bold text-gray-800">School</h1>
+              <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded">Manager</span>
+            </div>
+            <p className="text-secondary-500 mt-1 text-sm">
               Enter your email to receive a password reset link
             </p>
           </div>
@@ -105,7 +108,7 @@ const ForgotPassword: React.FC = () => {
                     setError('');
                   }}
                   placeholder="you@school.edu"
-                  className="input-field pl-10"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                   disabled={isLoading || success}
                 />
               </div>
@@ -114,11 +117,11 @@ const ForgotPassword: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading || success}
-              className="w-full btn-primary flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium py-3 rounded-lg hover:from-blue-600 hover:to-blue-700 transition shadow-lg hover:shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                   Sending...
                 </>
               ) : (
@@ -130,7 +133,7 @@ const ForgotPassword: React.FC = () => {
           <div className="mt-6 text-center">
             <p className="text-sm text-secondary-500">
               Remember your password?{' '}
-              <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+              <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
                 Sign In
               </Link>
             </p>

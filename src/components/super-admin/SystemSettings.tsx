@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Save, Server, Shield, Bell, Mail, Globe, 
-  DollarSign, CreditCard, Users, Lock, AlertCircle,
+  Save, Server, Shield, Bell, Mail,
+  DollarSign,  Lock, AlertCircle,
   Check, X, Settings as SettingsIcon, Loader2,
-  RefreshCw, AlertTriangle, CheckCircle, XCircle,
+  RefreshCw, CheckCircle,
   Smartphone, Banknote, Building2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -61,7 +61,7 @@ interface SettingsState {
 }
 
 const SystemSettings: React.FC = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   
   const [settings, setSettings] = useState<SettingsState>({
     maintenance_mode: false,
@@ -338,40 +338,6 @@ const SystemSettings: React.FC = () => {
       toast.error('Failed to reset settings');
     } finally {
       setIsReset(false);
-    }
-  };
-
-  const getPaymentGatewayIcon = (gateway: string) => {
-    switch (gateway) {
-      case 'mpesa':
-        return <Smartphone className="w-4 h-4 text-green-600" />;
-      case 'airtel_money':
-        return <Smartphone className="w-4 h-4 text-red-600" />;
-      case 'yas':
-        return <Banknote className="w-4 h-4 text-yellow-600" />;
-      case 'crdb':
-        return <Building2 className="w-4 h-4 text-blue-600" />;
-      case 'nmb':
-        return <Building2 className="w-4 h-4 text-purple-600" />;
-      default:
-        return <CreditCard className="w-4 h-4 text-gray-600" />;
-    }
-  };
-
-  const getPaymentGatewayLabel = (gateway: string) => {
-    switch (gateway) {
-      case 'mpesa':
-        return 'M-Pesa';
-      case 'airtel_money':
-        return 'Airtel Money';
-      case 'yas':
-        return 'YAS (Yetu SACCOS)';
-      case 'crdb':
-        return 'CRDB Bank';
-      case 'nmb':
-        return 'NMB Bank';
-      default:
-        return gateway;
     }
   };
 
@@ -699,7 +665,7 @@ const SystemSettings: React.FC = () => {
                     <input
                       type="text"
                       name="crdb_api_key"
-                      value="" // CRDB uses different fields
+                      value=""
                       onChange={handleChange}
                       placeholder="CRDB Client ID"
                       className="input-field text-sm"

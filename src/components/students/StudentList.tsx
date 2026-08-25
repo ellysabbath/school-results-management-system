@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Plus, Search, Edit, Trash2, Download, 
+  Plus, Search, Edit, Trash2,
   ChevronLeft, ChevronRight, User, Mail, Phone, 
-  Loader2, Building2,
+  Loader2,
   School, Hash, RefreshCw, X,
   ChevronDown, ChevronUp, Users, AlertCircle,
   ArrowRight
@@ -107,56 +107,7 @@ const StudentList: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
-
-  // ============================================
-  // FETCH MY SCHOOL BY ADMIN EMAIL
-  // ============================================
-
-  const fetchMySchoolByAdminEmail = useCallback(async () => {
-    if (!userEmail) {
-      toast.error('No email found for logged in user');
-      return;
-    }
-
-    setIsLoadingMySchool(true);
-    setSearchError(null);
-
-    try {
-      console.log('[StudentList] Fetching my school by admin email:', userEmail);
-      
-      const response = await schoolService.getSchools({
-        admin_email: userEmail,
-        page_size: 1
-      });
-      
-      console.log('[StudentList] My school response:', response);
-      
-      const results = response.results || response;
-      
-      if (results && results.length > 0) {
-        const schoolData = results[0];
-        const schoolCode = schoolData.school_code;
-        
-        if (schoolCode) {
-          setSearchSchoolCode(schoolCode);
-          await fetchStudentsBySchoolCode(schoolCode);
-          toast.success(`Loaded students from ${schoolData.name}`);
-        } else {
-          toast.error('School code not found for your school');
-        }
-      } else {
-        toast.error('No school found for your account. Please contact administrator.');
-      }
-    } catch (error: any) {
-      console.error('[StudentList] Error fetching my school:', error);
-      toast.error(error.response?.data?.message || 'Failed to load your school');
-    } finally {
-      setIsLoadingMySchool(false);
-      setIsInitialLoading(false);
-    }
-  }, [userEmail]);
 
   // ============================================
   // FETCH STUDENTS BY SCHOOL CODE
@@ -209,7 +160,7 @@ const StudentList: React.FC = () => {
         }
 
         if (response.total_students === 0) {
-          toast.info(`No students found in ${schoolCode}`);
+          toast.error(`No students found in ${schoolCode}`);
           setSearchError(`No students found in ${schoolCode}`);
         } else {
           toast.success(`Found ${response.total_students} students from ${schoolCode}`);
@@ -260,16 +211,83 @@ const StudentList: React.FC = () => {
   }, [navigate]);
 
   // ============================================
-  // AUTO-LOAD ON PAGE LOAD
+  // FETCH SCHOOL BY ADMIN EMAIL - DYNAMIC
+  // ============================================
+
+  const fetchSchoolByAdminEmail = useCallback(async () => {
+    if (!userEmail) {
+      toast.error('No email found for logged in user');
+      return;
+    }
+
+    setIsLoadingMySchool(true);
+    setSearchError(null);
+
+    try {
+      console.log('[StudentList] Fetching school by admin email:', userEmail);
+      
+      const response = await schoolService.getSchools({
+        admin_email: userEmail,
+        page_size: 1
+      });
+      
+      console.log('[StudentList] School response:', response);
+      
+      const results = response.results || response;
+      
+      if (results && results.length > 0) {
+        const schoolData = results[0];
+        const schoolCode = schoolData.school_code;
+        
+        if (schoolCode) {
+          setCurrentSchoolInfo({
+            code: schoolData.school_code,
+            name: schoolData.name,
+            id: schoolData.id
+          });
+          
+          // Auto-fetch students for this school
+          await fetchStudentsBySchoolCode(schoolCode);
+          toast.success(`Loaded students from ${schoolData.name}`);
+        } else {
+          toast.error('School code not found for your school');
+        }
+      } else {
+        toast.error('No school found for your account. Please contact administrator.');
+      }
+    } catch (error: any) {
+      console.error('[StudentList] Error fetching school:', error);
+      toast.error(error.response?.data?.message || 'Failed to load your school');
+    } finally {
+      setIsLoadingMySchool(false);
+      setIsInitialLoading(false);
+    }
+  }, [userEmail, fetchStudentsBySchoolCode]);
+
+  // ============================================
+  // AUTO-LOAD ON PAGE LOAD - DYNAMIC
   // ============================================
 
   useEffect(() => {
     if (isAuthenticated && userEmail) {
-      fetchMySchoolByAdminEmail();
+      // If we already have school data from context, use it
+      if (school?.school_code) {
+        const schoolCode = school.school_code;
+        setSearchSchoolCode(schoolCode);
+        setCurrentSchoolInfo({
+          code: school.school_code,
+          name: school.name,
+          id: school.id
+        });
+        fetchStudentsBySchoolCode(schoolCode);
+      } else {
+        // Otherwise fetch school by admin email
+        fetchSchoolByAdminEmail();
+      }
     } else {
       setIsInitialLoading(false);
     }
-  }, [isAuthenticated, userEmail, fetchMySchoolByAdminEmail]);
+  }, [isAuthenticated, userEmail, school, fetchSchoolByAdminEmail, fetchStudentsBySchoolCode]);
 
   // ============================================
   // HANDLERS
@@ -295,12 +313,16 @@ const StudentList: React.FC = () => {
   };
 
   const handleMySchool = async () => {
-    await fetchMySchoolByAdminEmail();
+    await fetchSchoolByAdminEmail();
   };
 
   const handleRefresh = () => {
     if (currentSchoolInfo?.code) {
       fetchStudentsBySchoolCode(currentSchoolInfo.code);
+    } else if (searchSchoolCode) {
+      fetchStudentsBySchoolCode(searchSchoolCode);
+    } else if (userEmail) {
+      fetchSchoolByAdminEmail();
     }
   };
 
@@ -332,9 +354,7 @@ const StudentList: React.FC = () => {
       toast.success(`Student "${selectedStudent.first_name} ${selectedStudent.last_name}" deleted successfully`);
       setIsDeleteModalOpen(false);
       setSelectedStudent(null);
-      if (currentSchoolInfo?.code) {
-        fetchStudentsBySchoolCode(currentSchoolInfo.code);
-      }
+      handleRefresh();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to delete student');
     } finally {
@@ -343,9 +363,7 @@ const StudentList: React.FC = () => {
   };
 
   const handleModalSuccess = () => {
-    if (currentSchoolInfo?.code) {
-      fetchStudentsBySchoolCode(currentSchoolInfo.code);
-    }
+    handleRefresh();
   };
 
   const goToPage = (page: number) => {
@@ -681,7 +699,12 @@ const StudentList: React.FC = () => {
             Students
           </h1>
           <p className="text-secondary-500 text-sm flex items-center gap-2 flex-wrap">
-            <span>Search students by school code</span>
+            <span>View and manage students</span>
+            {currentSchoolInfo && (
+              <span className="text-xs text-secondary-400">
+                • {currentSchoolInfo.name} ({currentSchoolInfo.code})
+              </span>
+            )}
           </p>
           {currentSchoolInfo && (
             <div className="flex items-center gap-2 mt-1 flex-wrap">

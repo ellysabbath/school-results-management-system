@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, X, User, Mail, Phone, Calendar, MapPin, Users } from 'lucide-react';
+import { ArrowLeft, Save, X, User, Mail, Phone, Calendar,Users } from 'lucide-react';
 import { mockStudents } from '../../utils/mockData';
 import toast from 'react-hot-toast';
 

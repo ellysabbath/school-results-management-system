@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Search, Filter, CheckCircle, XCircle, Clock, Printer, 
-  Download, Save, Send, Eye, Edit, Trash2, Plus, Trash,
+  Search, CheckCircle, Clock, Printer, 
+  Download, Save, Send, Trash2, Plus,
   School, Hash, Loader2, AlertCircle, RefreshCw, ArrowRight,
-  Users, BookOpen, FileText, ChevronDown, ChevronUp,
+  Users, BookOpen, FileText,
   User, X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -166,7 +166,6 @@ const ResultEntry: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
 
@@ -560,7 +559,7 @@ const ResultEntry: React.FC = () => {
   };
 
   // ============================================
-  // SAVE FUNCTIONS - FIXED
+  // SAVE FUNCTIONS
   // ============================================
 
   const saveStudentResults = async (studentId: number) => {
@@ -606,7 +605,6 @@ const ResultEntry: React.FC = () => {
       
       console.log('[ResultEntry] Saving results data:', resultsToSave);
       
-      // Use the correct endpoint - /api/results/bulk-create/
       const response = await resultService.bulkCreateResults(resultsToSave);
       console.log('[ResultEntry] Save response:', response);
       
@@ -858,14 +856,14 @@ const ResultEntry: React.FC = () => {
                 Refresh
               </button>
               <button 
-                onClick={() => toast.info('Print feature coming soon')}
+                onClick={() => toast('Print feature coming soon', { icon: '🖨️' })}
                 className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
               >
                 <Printer className="w-4 h-4" />
                 Print
               </button>
               <button 
-                onClick={() => toast.info('Export feature coming soon')}
+                onClick={() => toast('Export feature coming soon', { icon: '📥' })}
                 className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
               >
                 <Download className="w-4 h-4" />

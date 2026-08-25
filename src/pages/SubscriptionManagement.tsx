@@ -1,11 +1,10 @@
 // src/pages/SubscriptionManagement.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  CreditCard, DollarSign, Calendar, Clock, CheckCircle, XCircle,
-  AlertCircle, RefreshCw, Loader2, School, Hash, TrendingUp,
-  Award, Crown, Star, Zap, Shield, ArrowRight, Building2,
-  Users, BookOpen, FileText, BarChart3, Mail, Phone,
+  DollarSign, Clock, CheckCircle,
+  AlertCircle, RefreshCw, Loader2, School, Hash,
+  Award, Crown, Star, Zap, Shield, ArrowRight,
+  Users, BookOpen,
   User,
   Search,
   X
@@ -53,8 +52,7 @@ interface Subscription {
 }
 
 const SubscriptionManagement: React.FC = () => {
-  const navigate = useNavigate();
-  const { user, isAuthenticated, school } = useAuth();
+  const { user, isAuthenticated} = useAuth();
   
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -74,7 +72,6 @@ const SubscriptionManagement: React.FC = () => {
   } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
 
   // Fetch plans

@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
 import { 
   Save, Building2, Mail, Phone, MapPin, Globe, 
-  Users, BookOpen, Award, Bell, Shield, Palette,
-  Upload, X, Check
+  Bell, Shield, Palette,
 } from 'lucide-react';
-import { mockSchools } from '../../utils/mockData';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const SchoolSettings: React.FC = () => {
-  const school = mockSchools[0];
+  const { user, school } = useAuth();
+  
   const [settings, setSettings] = useState({
-    schoolName: school.name,
-    email: school.email,
-    phone: school.phone,
-    address: school.address,
-    timezone: 'America/New_York',
-    dateFormat: 'MM/DD/YYYY',
-    academicYearStart: '2026-09-01',
-    academicYearEnd: '2027-06-30',
+    schoolName: school?.name || '',
+    email: school?.email || user?.email || '',
+    phone: user?.phone || '',  // Use user phone as fallback since SchoolInfo may not have phone
+    address: (school as any)?.address || '',
+    timezone: 'Africa/Dar_es_Salaam',
+    dateFormat: 'DD/MM/YYYY',
+    academicYearStart: new Date().getFullYear() + '-09-01',
+    academicYearEnd: (new Date().getFullYear() + 1) + '-06-30',
     allowStudentRegistration: true,
     allowParentAccess: true,
     emailNotifications: true,
@@ -43,6 +43,11 @@ const SchoolSettings: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-secondary-900">School Settings</h1>
         <p className="text-secondary-500">Manage your school profile and preferences</p>
+        {school && (
+          <p className="text-xs text-secondary-400 mt-1">
+            {school.name} {school.school_code && `(${school.school_code})`}
+          </p>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -176,11 +181,14 @@ const SchoolSettings: React.FC = () => {
                 onChange={handleChange}
                 className="input-field"
               >
+                <option value="Africa/Dar_es_Salaam">East Africa Time (EAT)</option>
+                <option value="Africa/Nairobi">East Africa Time (EAT)</option>
+                <option value="Africa/Kampala">East Africa Time (EAT)</option>
+                <option value="UTC">UTC</option>
                 <option value="America/New_York">Eastern Time (ET)</option>
                 <option value="America/Chicago">Central Time (CT)</option>
                 <option value="America/Denver">Mountain Time (MT)</option>
                 <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                <option value="UTC">UTC</option>
               </select>
             </div>
             <div>
@@ -275,9 +283,27 @@ const SchoolSettings: React.FC = () => {
           </button>
           <button
             type="button"
+            onClick={() => {
+              setSettings({
+                schoolName: school?.name || '',
+                email: school?.email || user?.email || '',
+                phone: user?.phone || '',  // Use user phone as fallback
+                address: (school as any)?.address || '',
+                timezone: 'Africa/Dar_es_Salaam',
+                dateFormat: 'DD/MM/YYYY',
+                academicYearStart: new Date().getFullYear() + '-09-01',
+                academicYearEnd: (new Date().getFullYear() + 1) + '-06-30',
+                allowStudentRegistration: true,
+                allowParentAccess: true,
+                emailNotifications: true,
+                smsNotifications: false,
+                themeColor: 'blue',
+              });
+              toast('Settings reset', { icon: '🔄' });
+            }}
             className="px-6 py-2.5 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
           >
-            Cancel
+            Reset
           </button>
         </div>
       </form>

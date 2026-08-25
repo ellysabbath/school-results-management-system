@@ -12,18 +12,12 @@ import {
   ArrowRight,
   HelpCircle,
   Star,
-  Shield,
-  Zap,
   Mail,
   Phone,
   MapPin,
   UserPlus2Icon,
-  BookOpen,
   Smartphone,
   Lock,
-  TrendingUp,
-  Clock,
-  Headphones
 } from 'lucide-react';
 
 const Home: React.FC = () => {

@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Mail, 
   Search, 
-  Filter, 
   Eye, 
   Trash2, 
   CheckCircle, 
@@ -15,18 +14,13 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
- 
   Tag,
   Flag,
-  Edit,
   Reply,
   Send,
   X,
- 
   Inbox,
-  
   Archive,
-  
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -311,15 +305,6 @@ const ContactManagement: React.FC = () => {
     } catch (error: any) {
       console.error('[ContactManagement] Error updating status:', error);
       toast.error(error.response?.data?.message || 'Failed to update status');
-    }
-  };
-
-  const handleMarkRead = async (id: number) => {
-    try {
-      await contactService.respondToContact(id, '');
-      await loadData();
-    } catch (error: any) {
-      console.error('[ContactManagement] Error marking as read:', error);
     }
   };
 

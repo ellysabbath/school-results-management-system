@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, Search, Edit, Trash2, Mail, Phone, Download, 
-  Loader2, User, AlertCircle, XCircle, CheckCircle,
+  Loader2, User, AlertCircle,
   ChevronLeft, ChevronRight, Filter, Building2, Award,
   Calendar, BookOpen, School, X, Hash,
   RefreshCw, ArrowRight
@@ -36,15 +36,6 @@ interface Teacher {
   school_code?: string;
   full_name?: string;
   user?: number | null;
-}
-
-interface SchoolData {
-  id: number;
-  name: string;
-  email: string;
-  admin_name: string;
-  admin_email: string;
-  school_code?: string;
 }
 
 interface ApiResponse {
@@ -113,7 +104,7 @@ const TeacherList: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
+  
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
   const userEmail = user?.email || '';
 
@@ -219,7 +210,7 @@ const TeacherList: React.FC = () => {
         setDepartments(depts);
         
         if (teachersWithCode.length === 0) {
-          toast.info(`No teachers found in ${schoolData.school_name}`);
+          toast.error(`No teachers found in ${schoolData.school_name}`);
           setSearchError(`No teachers found in ${schoolData.school_name}`);
         } else {
           toast.success(`Found ${teachersWithCode.length} teacher(s) from ${schoolData.school_name}`);
@@ -229,7 +220,7 @@ const TeacherList: React.FC = () => {
       } else if (response?.status === 'success' && response.data && response.data.length === 0) {
         const errorMsg = `School with code "${cleanCode}" has no teachers`;
         setSearchError(errorMsg);
-        toast.info(errorMsg);
+        toast.error(errorMsg);
         resetState();
       } else {
         const errorMsg = `School with code "${cleanCode}" not found`;
@@ -273,7 +264,7 @@ const TeacherList: React.FC = () => {
     } else {
       setIsInitialLoading(false);
     }
-  }, [isAuthenticated, userEmail]);
+  }, [isAuthenticated, userEmail, fetchMySchoolByAdminEmail]);
 
   // ============================================
   // HELPER FUNCTIONS
@@ -703,7 +694,7 @@ const TeacherList: React.FC = () => {
             </button>
           )}
           <button 
-            onClick={() => toast.info('Export feature coming soon')}
+            onClick={() => toast.success('Export feature coming soon')}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
           >
             <Download className="w-4 h-4" />
@@ -954,7 +945,6 @@ const TeacherList: React.FC = () => {
         onSuccess={handleModalSuccess}
         mode="add"
         schoolId={currentSchoolInfo?.id || userSchoolId || undefined}
-        schoolCode={currentSchoolInfo?.code || userSchoolCode || undefined}
       />
 
       <TeacherModal
@@ -964,7 +954,6 @@ const TeacherList: React.FC = () => {
         teacher={selectedTeacher}
         mode="edit"
         schoolId={currentSchoolInfo?.id || userSchoolId || undefined}
-        schoolCode={currentSchoolInfo?.code || userSchoolCode || undefined}
       />
 
       <DeleteConfirmModal

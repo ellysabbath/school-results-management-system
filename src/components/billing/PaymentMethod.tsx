@@ -1,14 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Lock, Shield, Check, AlertCircle, Loader2 } from 'lucide-react';
-import { subscriptionService } from '../../api/schoolApi';
+import { ArrowLeft, CreditCard, Lock, Shield, AlertCircle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-interface PaymentMethodProps {
-  planId?: number;
-  planName?: string;
-  amount?: number;
-}
 
 const PaymentMethod: React.FC = () => {
   const navigate = useNavigate();
@@ -329,7 +322,7 @@ const PaymentMethod: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <Check className="w-4 h-4 mr-2" />
+                    <CreditCard className="w-4 h-4 mr-2" />
                     {state.planName ? 'Subscribe Now' : 'Add Payment Method'}
                   </>
                 )}

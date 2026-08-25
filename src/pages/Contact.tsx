@@ -12,9 +12,7 @@ import {
   LayoutDashboard, 
   UserPlus2Icon,
   Clock,
-  Headphones,
   MessageCircle,
-  Globe,
   Loader2,
   AlertCircle
 } from 'lucide-react';

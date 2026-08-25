@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Plus, Edit, Trash2, Save, X, Loader2, RefreshCw, Search,
   ChevronLeft, ChevronRight, Eye, User, Mail, Phone, 
-  Shield, CheckCircle, XCircle, AlertCircle, Clock,
-  Hash, Building2, UserCircle, Lock, Key, Filter,
-  Users, UserPlus, UserCheck, UserX, Activity
+  Shield, CheckCircle, XCircle, Clock,
+  Hash, Building2, UserCircle, Lock, Key,
+  Users, UserPlus, UserCheck, UserX
 } from 'lucide-react';
 import { adminUserService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
@@ -49,8 +48,6 @@ interface UserFormData {
 }
 
 const UsersAdmin: React.FC = () => {
-  const navigate = useNavigate();
-  
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,7 +93,7 @@ const UsersAdmin: React.FC = () => {
     roleStats: {} as Record<string, number>,
   });
 
-  // Fetch users - No authentication required
+  // Fetch users
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -272,11 +269,12 @@ const UsersAdmin: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      const data = { ...formData };
-      delete data.password; // Don't send password if not changing
+      // Remove password field if empty (don't send password if not changing)
+      const { password, ...restData } = formData;
+      const dataToSend = password ? formData : restData;
       
-      console.log('[UsersAdmin] Updating user:', data);
-      const response = await adminUserService.updateUser(selectedUser.id, data);
+      console.log('[UsersAdmin] Updating user:', dataToSend);
+      const response = await adminUserService.updateUser(selectedUser.id, dataToSend);
       console.log('[UsersAdmin] Response:', response);
       
       toast.success('User updated successfully!');
@@ -1387,10 +1385,7 @@ const UsersAdmin: React.FC = () => {
         onConfirm={confirmDelete}
         title="Delete User"
         message={`Are you sure you want to delete "${selectedUser?.full_name || selectedUser?.username}"?`}
-        description={`This will permanently delete the user account and all associated data. This action cannot be undone.`}
-        confirmText="Delete User"
         isLoading={isProcessing}
-        variant="danger"
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, User, Mail, Phone, Calendar, Building2, 
+  X, User, Mail, Phone, Calendar, 
   Loader2, AlertCircle, BookOpen, Hash, School,
   Users
 } from 'lucide-react';
@@ -84,7 +84,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
   });
 
   // Get school code from user or context
-  const userSchoolCode = school?.school_code || user?.school_id || null;
+  const userSchoolCode = school?.school_code || user?.school_id || undefined;
 
   // Load school function
   const loadSchool = async (schoolIdToLoad?: number, schoolCodeToLoad?: string) => {
@@ -454,19 +454,18 @@ const StudentModal: React.FC<StudentModalProps> = ({
                 <label className="block text-sm font-medium text-secondary-700 mb-1">
                   Admission Number <span className="text-secondary-400 text-xs">(Optional)</span>
                 </label>
-
-<div className="relative">
-  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-  <input
-    type="text"
-    name="admission_number"
-    value={formData.admission_number}
-    onChange={handleChange}
-    placeholder="AY8NH-0001"
-    className={`input-field pl-10 bg-gray-50 cursor-not-allowed ${errors.admission_number ? 'border-red-500 focus:ring-red-500' : ''}`}
-    disabled={true}
-  />
-</div>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                  <input
+                    type="text"
+                    name="admission_number"
+                    value={formData.admission_number}
+                    onChange={handleChange}
+                    placeholder="AY8NH-0001"
+                    className={`input-field pl-10 bg-gray-50 cursor-not-allowed ${errors.admission_number ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    disabled={true}
+                  />
+                </div>
                 {errors.admission_number && (
                   <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />

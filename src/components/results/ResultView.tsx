@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+
 import { 
-  Search, Filter, Download, Printer, Eye, ChevronDown,
-  Calendar, BookOpen, Award, TrendingUp, BarChart3,
+  Search, Download, Printer, BookOpen, Award, TrendingUp, BarChart3,
   School, Hash, Loader2, AlertCircle, RefreshCw, 
-  ArrowRight, User, FileText, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, Users, Mail, Phone,
+  ArrowRight, User, FileText, CheckCircle,
+  ChevronLeft, ChevronRight,
   X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -37,6 +36,7 @@ interface Result {
   id: number;
   student: number;
   subject: number;
+  term: number;
   marks_obtained: number;
   total_marks: number;
   percentage: number;
@@ -83,7 +83,6 @@ const getGradeColor = (grade: string): string => {
 // ============================================
 
 const ResultView: React.FC = () => {
-  const navigate = useNavigate();
   const { user, isAuthenticated, school } = useAuth();
 
   // ============================================
@@ -129,10 +128,8 @@ const ResultView: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
-  const userId = user?.id || null;
 
   // Calculate stats from published results
   const publishedResults = allResults.filter(r => r.is_published);
@@ -247,7 +244,7 @@ const ResultView: React.FC = () => {
         setStudentData(currentStudent);
         console.log('[ResultView] Current student:', currentStudent);
       } else {
-        toast.warning('No student found for your account');
+        toast.error('No student found for your account');
       }
       
       // Fetch subjects
@@ -478,15 +475,6 @@ const ResultView: React.FC = () => {
   // RENDER HELPERS
   // ============================================
 
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
   const renderLoadingState = () => (
     <div className="flex items-center justify-center py-16">
       <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
@@ -630,7 +618,7 @@ const ResultView: React.FC = () => {
             </button>
           )}
           <button 
-            onClick={() => toast.info('Print feature coming soon')}
+            onClick={() => toast('Print feature coming soon', { icon: '🖨️' })}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
           >
             <Printer className="w-4 h-4" />

@@ -3,11 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { 
   Menu, 
   Bell, 
-  User, 
+  
   Search, 
   LogOut, 
   Settings, 
-  CreditCard, 
+  
   HelpCircle,
   ChevronDown,
   Moon,
@@ -15,24 +15,21 @@ import {
   UserCircle,
   Mail,
   Phone,
-  Building2,
-  Shield,
-  Award,
+
   School,
-  Hash,
+  
   Copy,
   AlertTriangle,
-  Clock,
+  
   DollarSign,
   Calendar,
   X,
   CheckCircle,
   FileText,
   Loader2,
-  TrendingUp,
-  AlertCircle,
+
   Users,
-  BookOpen
+ 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { schoolService, notificationService, resultService, studentService } from '../../api/schoolApi';
@@ -88,7 +85,7 @@ interface StudentData {
   student_class: string;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
+const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
@@ -99,8 +96,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
   const [isLoadingSchool, setIsLoadingSchool] = useState(false);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [expiryNotifications, setExpiryNotifications] = useState<ExpiryNotification[]>([]);
-  const [resultNotifications, setResultNotifications] = useState<Notification[]>([]);
-  const [systemNotifications, setSystemNotifications] = useState<Notification[]>([]);
+
   const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [studentData, setStudentData] = useState<StudentData | null>(null);
@@ -251,7 +247,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
             link: n.action_url || null,
           }));
           allNotifs.push(...systemNotifs);
-          setSystemNotifications(systemNotifs);
+          
         }
       } catch (error) {
         console.log('Could not fetch system notifications:', error);
@@ -275,18 +271,18 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
             resultData = resultsResponse.data;
           }
           
-          const resultNotifs = resultData.map((r: any) => ({
+          const resultNotifs: Notification[] = resultData.map((r: any) => ({
             id: `result-${r.id || Math.random()}`,
             title: `📊 ${r.subject_name || 'Subject'} Result`,
             message: `${r.marks_obtained}/${r.total_marks} (${r.grade || 'N/A'}) - ${r.term_name || ''}`,
             time: r.created_at || new Date().toISOString(),
             read: false,
-            type: 'result',
+            type: 'result' as const,
             created_at: r.created_at || new Date().toISOString(),
             link: '/results-management',
           }));
           allNotifs.push(...resultNotifs);
-          setResultNotifications(resultNotifs);
+          
         } catch (error) {
           console.log('Could not fetch result notifications:', error);
         }
@@ -294,15 +290,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
 
       // 3. Add expiry notifications
       if (expiryNotifications.length > 0) {
-        const expiryNotifs = expiryNotifications.map(n => ({
+        const expiryNotifs: Notification[] = expiryNotifications.map(n => ({
           id: n.id,
           title: n.title,
           message: n.message,
           time: n.created_at,
           read: n.read,
-          type: n.type === 'danger' ? 'error' : 'warning',
+          type: n.type === 'danger' ? 'error' : 'warning' as const,
           created_at: n.created_at,
-          link: '/pricing',
+          link: '/payment',
         }));
         allNotifs.push(...expiryNotifs);
       }
@@ -456,49 +452,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
     }
   };
 
-  // ============================================
-  // GET EXPIRY STYLES
-  // ============================================
-
-  const getExpiryStyles = (type: string): string => {
-    switch (type) {
-      case 'danger':
-        return 'bg-red-50 border-red-200 text-red-700';
-      case 'warning':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-700';
-      case 'success':
-        return 'bg-green-50 border-green-200 text-green-700';
-      default:
-        return 'bg-blue-50 border-blue-200 text-blue-700';
-    }
-  };
-
-  const getExpiryIcon = (type: string) => {
-    switch (type) {
-      case 'danger':
-        return <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />;
-      case 'warning':
-        return <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0" />;
-      case 'success':
-        return <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />;
-      default:
-        return <Calendar className="w-4 h-4 text-blue-500 flex-shrink-0" />;
-    }
-  };
-
-  const getStatusBadge = (daysRemaining: number): { text: string; color: string } => {
-    if (daysRemaining <= 0) {
-      return { text: 'Expired', color: 'bg-red-100 text-red-700' };
-    } else if (daysRemaining <= 7) {
-      return { text: 'Urgent', color: 'bg-red-100 text-red-700' };
-    } else if (daysRemaining <= 14) {
-      return { text: 'Soon', color: 'bg-yellow-100 text-yellow-700' };
-    } else if (daysRemaining <= 30) {
-      return { text: 'Upcoming', color: 'bg-blue-100 text-blue-700' };
-    }
-    return { text: 'Active', color: 'bg-green-100 text-green-700' };
-  };
-
   const getNotificationIcon = (type?: string) => {
     switch (type) {
       case 'success':
@@ -555,11 +508,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('School code copied to clipboard!');
-  };
-
-  const handleRenew = () => {
-    navigate('/pricing');
-    setShowNotifications(false);
   };
 
   const getInitials = (firstName?: string, lastName?: string): string => {
@@ -924,7 +872,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobile = false }) => {
                     )}
                   </Link>
                   <Link
-                    to="/pricing"
+                    to="/payment"
                     className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors text-gray-700"
                     onClick={() => setShowProfile(false)}
                   >

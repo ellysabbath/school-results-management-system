@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import { 
-  Search, Filter, Download, Printer, Eye, ChevronDown,
-  Calendar, BookOpen, Award, TrendingUp, BarChart3,
-  School, Hash, Loader2, AlertCircle, RefreshCw, 
-  ArrowRight, User, FileText, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, Users, Mail, Phone,
+  Search, Download, Printer,
+  BookOpen, Award, TrendingUp, BarChart3,
+  School, Hash, Loader2, RefreshCw, 
+  User, FileText, CheckCircle,
+  ChevronLeft, ChevronRight,
   X, UserCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { resultService, studentService, subjectService, schoolService, termService } from '../../api/schoolApi';
+import { resultService, studentService, subjectService, termService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 
 // ============================================
@@ -39,6 +38,7 @@ interface Result {
   id: number;
   student: number;
   subject: number;
+  term: number;  // Added missing term property
   marks_obtained: number;
   total_marks: number;
   percentage: number;
@@ -84,8 +84,7 @@ const getGradeColor = (grade: string): string => {
 // MAIN COMPONENT
 // ============================================
 
-const ResultView: React.FC = () => {
-  const navigate = useNavigate();
+const MyResults: React.FC = () => {
   const { user, isAuthenticated, school } = useAuth();
 
   // ============================================
@@ -129,7 +128,8 @@ const ResultView: React.FC = () => {
 
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
-  const userSchoolCode = school?.school_code || user?.school_code || null;
+  const userSchoolCode = school?.school_code || user?.school_id || null;
+  const userName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'User';
 
   // Calculate stats from published results
   const publishedResults = allResults.filter(r => r.is_published);
@@ -161,7 +161,7 @@ const ResultView: React.FC = () => {
     setIsInitialLoading(true);
 
     try {
-      console.log('[ResultView] Fetching results for logged-in user:', user.email);
+      console.log('[MyResults] Fetching results for logged-in user:', user.email);
 
       // Step 1: Get the student profile using the logged-in user's email
       let currentStudent: Student | null = null;
@@ -172,7 +172,7 @@ const ResultView: React.FC = () => {
         page_size: 1
       });
       
-      console.log('[ResultView] Students by email response:', studentsResponse);
+      console.log('[MyResults] Students by email response:', studentsResponse);
       
       let studentDataList: Student[] = [];
       if (studentsResponse.results) {
@@ -185,14 +185,14 @@ const ResultView: React.FC = () => {
       
       if (studentDataList.length > 0) {
         currentStudent = studentDataList[0];
-        console.log('[ResultView] Found student by email:', currentStudent);
+        console.log('[MyResults] Found student by email:', currentStudent);
       } else {
         // If not found by email, try to find by school
-        console.log('[ResultView] No student found with email, checking school...');
+        console.log('[MyResults] No student found with email, checking school...');
         
         if (userSchoolCode) {
           const studentsBySchoolResponse = await studentService.getStudentsBySchoolCode(userSchoolCode);
-          console.log('[ResultView] Students by school response:', studentsBySchoolResponse);
+          console.log('[MyResults] Students by school response:', studentsBySchoolResponse);
           
           let allStudents: Student[] = [];
           if (studentsBySchoolResponse.status === 'success' && studentsBySchoolResponse.data) {
@@ -206,17 +206,14 @@ const ResultView: React.FC = () => {
             allStudents = studentsBySchoolResponse.results;
           }
           
-          // Try to find by name match or take the first student (for demo purposes)
-          // In a real app, you'd have a proper user-to-student mapping
+          // Try to find by name match or take the first student
           if (allStudents.length > 0) {
-            // Try to match by name
-            const userName = user.full_name || user.username || '';
             const matchedStudent = allStudents.find(s => 
               s.full_name?.toLowerCase().includes(userName.toLowerCase()) ||
               `${s.first_name} ${s.last_name}`.toLowerCase().includes(userName.toLowerCase())
             );
             currentStudent = matchedStudent || allStudents[0];
-            console.log('[ResultView] Selected student from school:', currentStudent);
+            console.log('[MyResults] Selected student from school:', currentStudent);
           }
         }
       }
@@ -232,7 +229,7 @@ const ResultView: React.FC = () => {
 
       // Step 2: Get school info
       if (currentStudent.school_code || userSchoolCode) {
-        const schoolCode = currentStudent.school_code || userSchoolCode;
+        const schoolCode = currentStudent.school_code || userSchoolCode || '';
         setSchoolInfo({
           code: schoolCode,
           name: school?.name || currentStudent.school?.toString() || 'My School',
@@ -247,7 +244,7 @@ const ResultView: React.FC = () => {
           school_code: schoolCode,
           page_size: 100
         });
-        console.log('[ResultView] Subjects response:', subjectsResponse);
+        console.log('[MyResults] Subjects response:', subjectsResponse);
         
         let subjectData: Subject[] = [];
         if (subjectsResponse.results) {
@@ -261,7 +258,7 @@ const ResultView: React.FC = () => {
         if (userSchoolId) {
           try {
             const termsResponse = await termService.getTermsBySchool(userSchoolId.toString());
-            console.log('[ResultView] Terms response:', termsResponse);
+            console.log('[MyResults] Terms response:', termsResponse);
             
             let termData: Term[] = [];
             if (termsResponse.results) {
@@ -287,7 +284,7 @@ const ResultView: React.FC = () => {
           student: currentStudent.id,
           page_size: 100
         });
-        console.log('[ResultView] Results response:', resultsResponse);
+        console.log('[MyResults] Results response:', resultsResponse);
         
         let resultData: Result[] = [];
         if (resultsResponse.results) {
@@ -319,13 +316,13 @@ const ResultView: React.FC = () => {
       }
 
     } catch (error: any) {
-      console.error('[ResultView] Error fetching data:', error);
+      console.error('[MyResults] Error fetching data:', error);
       toast.error(error.response?.data?.message || 'Failed to fetch results');
     } finally {
       setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [isAuthenticated, user, userEmail, userSchoolId, userSchoolCode, school]);
+  }, [isAuthenticated, user, userEmail, userSchoolId, userSchoolCode, school, userName, selectedTerm, terms]);
 
   // ============================================
   // AUTO-LOAD ON PAGE LOAD
@@ -442,15 +439,6 @@ const ResultView: React.FC = () => {
   // RENDER HELPERS
   // ============================================
 
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
   const renderLoadingState = () => (
     <div className="flex items-center justify-center py-16">
       <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
@@ -556,7 +544,7 @@ const ResultView: React.FC = () => {
             Refresh
           </button>
           <button 
-            onClick={() => toast.info('Print feature coming soon')}
+            onClick={() => toast('Print feature coming soon', { icon: '🖨️' })}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
           >
             <Printer className="w-4 h-4" />
@@ -869,4 +857,4 @@ const ResultView: React.FC = () => {
   );
 };
 
-export default ResultView;
+export default MyResults;

@@ -3,11 +3,10 @@ import { Link } from 'react-router-dom';
 import { 
   Save, User, Mail, Phone, Lock, Camera, 
   ArrowLeft, Check, AlertCircle, Loader2,
-  Calendar, Clock, Activity, Shield, Award,
-  Building2, Users, BookOpen, FileText,
+  Clock, Activity, Shield,
   ChevronDown, ChevronUp, Copy, Eye, EyeOff,
   LogIn, LogOut, Edit, Trash2, Plus, School,
-  Hash, RefreshCw
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { schoolService } from '../../api/schoolApi';
@@ -35,7 +34,6 @@ const ProfileSettings: React.FC = () => {
   const { user, updateProfile, getProfile, getActivityLogs, isLoading: authLoading } = useAuth();
   
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);

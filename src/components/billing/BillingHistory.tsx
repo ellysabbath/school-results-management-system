@@ -1,22 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Download, FileText, CheckCircle, XCircle, Clock, Eye,
-  Plus, Search, Filter, Edit, Trash2, Save, X, Loader2,
-  RefreshCw, AlertCircle, CreditCard, Calendar, DollarSign,
-  ChevronLeft, ChevronRight, Printer,
+  Plus, Search, Edit, Trash2, Save, X, Loader2,
+  RefreshCw, AlertCircle, CreditCard, DollarSign,
+  ChevronLeft, ChevronRight,
   File,
-  Phone,
-  PhoneCall,
-  Mail,
-  Hash,
   User,
   Building2,
-  Smartphone,
-  Tag,
   Receipt,
   ExternalLink,
-  Upload,
   Lock,
   Wallet,
   TrendingUp
@@ -88,7 +81,6 @@ const BillingHistory: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -107,8 +99,6 @@ const BillingHistory: React.FC = () => {
     plan_name: 'professional',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const [attachmentName, setAttachmentName] = useState('');
 
   const [stats, setStats] = useState({
     totalSpent: 0,
@@ -122,8 +112,8 @@ const BillingHistory: React.FC = () => {
 
   // Get user email and school info from auth context
   const userEmail = user?.email || '';
-  const userSchoolCode = school?.school_code || user?.school_code || '';
-  const userSchoolName = school?.name || '';
+  const userSchoolCode = school?.school_code || user?.school_id || '';
+  // const userSchoolName = school?.name || '';
 
   // Fetch school data for the logged-in user
   const fetchSchoolData = useCallback(async () => {
@@ -167,7 +157,6 @@ const BillingHistory: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // First fetch the school to get the school code
       const response = await paymentService.getTransactions({ page_size: 100 });
       console.log('[BillingHistory] Payments response:', response);
       
@@ -282,8 +271,6 @@ const BillingHistory: React.FC = () => {
       notes: '',
       plan_name: 'professional',
     });
-    setAttachmentFile(null);
-    setAttachmentName('');
     setFormErrors({});
   };
 
@@ -298,60 +285,9 @@ const BillingHistory: React.FC = () => {
     }
   };
 
-  // Convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const base64 = await fileToBase64(file);
-        setAttachmentFile(file);
-        setAttachmentName(file.name);
-        
-        setFormData(prev => ({
-          ...prev,
-          receipt_attachment_base64: base64,
-          receipt_filename: file.name,
-        }));
-        
-        toast.success(`File "${file.name}" uploaded successfully`);
-      } catch (error) {
-        console.error('Failed to convert file to base64:', error);
-        toast.error('Failed to process file');
-      }
-    }
-  };
-
-  const removeFile = () => {
-    setAttachmentFile(null);
-    setAttachmentName('');
-    setFormData(prev => ({
-      ...prev,
-      receipt_attachment_base64: '',
-      receipt_filename: '',
-    }));
-  };
-
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
     
-    if (!formData.school_code || formData.school_code.trim().length < 2) {
-      errors.school_code = 'School code is required';
-    }
-    if (!formData.admin_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.admin_email)) {
-      errors.admin_email = 'Please enter a valid email';
-    }
-    if (!formData.admin_phone || formData.admin_phone.replace(/\D/g, '').length < 10) {
-      errors.admin_phone = 'Please enter a valid phone number';
-    }
     if (!formData.amount || formData.amount <= 0) {
       errors.amount = 'Amount must be greater than 0';
     }
@@ -361,48 +297,9 @@ const BillingHistory: React.FC = () => {
     if (!formData.transaction_reference || formData.transaction_reference.trim().length < 3) {
       errors.transaction_reference = 'Transaction reference is required';
     }
-    if (!formData.plan_name) {
-      errors.plan_name = 'Plan name is required';
-    }
     
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  };
-
-  const handleAddPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const data = {
-        ...formData,
-        admin_email: userEmail, // Ensure admin_email is set to logged in user
-      };
-      
-      console.log('[BillingHistory] Creating payment with data:', data);
-      const response = await paymentService.createTransaction(data);
-      console.log('[BillingHistory] Response:', response);
-      
-      toast.success('Payment added successfully!');
-      setIsAddModalOpen(false);
-      resetForm();
-      fetchPayments();
-    } catch (error: any) {
-      console.error('[BillingHistory] Failed to add payment:', error);
-      console.error('[BillingHistory] Error response:', error.response?.data);
-      
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error ||
-                          'Failed to add payment';
-      toast.error(errorMessage);
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const handleEditPayment = async (e: React.FormEvent) => {
@@ -578,6 +475,11 @@ const BillingHistory: React.FC = () => {
   const paymentMethods = ['all', ...new Set(payments.map(p => p.payment_method).filter(Boolean))];
   const statusOptions = ['all', 'pending', 'processing', 'completed', 'failed', 'cancelled'];
 
+  // Handle Add Payment button click - navigate to /payment
+  const handleAddPaymentClick = () => {
+    navigate('/payment');
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -600,12 +502,12 @@ const BillingHistory: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <Link
-            to="/billing"
+          <button
+            onClick={() => navigate(-1)}
             className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-secondary-600" />
-          </Link>
+          </button>
           <div>
             <h1 className="text-2xl font-bold text-secondary-900">My Payment History</h1>
             <p className="text-secondary-500">View and manage your payment history</p>
@@ -626,17 +528,14 @@ const BillingHistory: React.FC = () => {
             Refresh
           </button>
           <button 
-            onClick={() => toast.info('Export feature coming soon')}
+            onClick={() => toast('Export feature coming soon', { icon: '📥' })}
             className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm"
           >
             <Download className="w-4 h-4" />
             Export
           </button>
           <button
-            onClick={() => {
-              resetForm();
-              setIsAddModalOpen(true);
-            }}
+            onClick={handleAddPaymentClick}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
@@ -758,10 +657,7 @@ const BillingHistory: React.FC = () => {
               {searchTerm ? 'Try adjusting your search or filters' : 'Start by adding your first payment'}
             </p>
             <button
-              onClick={() => {
-                resetForm();
-                setIsAddModalOpen(true);
-              }}
+              onClick={handleAddPaymentClick}
               className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               Add Payment
@@ -1138,280 +1034,6 @@ const BillingHistory: React.FC = () => {
         </div>
       )}
 
-      {/* Add Payment Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-slide-up">
-            <div className="sticky top-0 bg-white border-b border-secondary-200 px-6 py-4 flex items-center justify-between z-10">
-              <div>
-                <h2 className="text-xl font-bold text-secondary-900 flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-primary-600" />
-                  Add Payment
-                </h2>
-                <p className="text-sm text-secondary-500">Add a new payment record</p>
-              </div>
-              <button
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  resetForm();
-                }}
-                className="p-2 hover:bg-secondary-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-secondary-400" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddPayment} className="px-6 py-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  School Code <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                  <input
-                    type="text"
-                    name="school_code"
-                    value={formData.school_code}
-                    onChange={handleFormChange}
-                    placeholder="Enter school code"
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                      formErrors.school_code ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                    }`}
-                    disabled={isSaving}
-                  />
-                </div>
-                {formErrors.school_code && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.school_code}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Admin Email <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                  <input
-                    type="email"
-                    name="admin_email"
-                    value={formData.admin_email}
-                    onChange={handleFormChange}
-                    placeholder="admin@school.com"
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                      formErrors.admin_email ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                    }`}
-                    disabled={isSaving}
-                    readOnly
-                  />
-                </div>
-                {formErrors.admin_email && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.admin_email}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Admin Phone <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                  <input
-                    type="tel"
-                    name="admin_phone"
-                    value={formData.admin_phone}
-                    onChange={handleFormChange}
-                    placeholder="+255 712 345 678"
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                      formErrors.admin_phone ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                    }`}
-                    disabled={isSaving}
-                  />
-                </div>
-                {formErrors.admin_phone && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.admin_phone}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Amount <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                  <input
-                    type="number"
-                    name="amount"
-                    value={formData.amount}
-                    onChange={handleFormChange}
-                    placeholder="Enter amount"
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                      formErrors.amount ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                    }`}
-                    min="0"
-                    step="100"
-                    disabled={isSaving}
-                  />
-                </div>
-                {formErrors.amount && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.amount}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Plan Name <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="plan_name"
-                  value={formData.plan_name}
-                  onChange={handleFormChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                    formErrors.plan_name ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                  }`}
-                  disabled={isSaving}
-                >
-                  <option value="starter">Starter</option>
-                  <option value="professional">Professional</option>
-                  <option value="enterprise">Enterprise</option>
-                  <option value="trial">Trial</option>
-                </select>
-                {formErrors.plan_name && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.plan_name}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Payment Method <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="payment_method"
-                  value={formData.payment_method}
-                  onChange={handleFormChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                    formErrors.payment_method ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                  }`}
-                  disabled={isSaving}
-                >
-                  <option value="vodacom">Vodacom</option>
-                  <option value="tigo">Tigo</option>
-                  <option value="airtel">Airtel</option>
-                  <option value="halotel">Halotel</option>
-                  <option value="ttcl">TTCL</option>
-                  <option value="zantel">Zantel</option>
-                </select>
-                {formErrors.payment_method && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.payment_method}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Transaction Reference <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                  <input
-                    type="text"
-                    name="transaction_reference"
-                    value={formData.transaction_reference}
-                    onChange={handleFormChange}
-                    placeholder="Enter transaction reference"
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                      formErrors.transaction_reference ? 'border-red-500 focus:ring-red-500' : 'border-secondary-200'
-                    }`}
-                    disabled={isSaving}
-                  />
-                </div>
-                {formErrors.transaction_reference && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.transaction_reference}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleFormChange}
-                  placeholder="Additional notes..."
-                  className="w-full px-4 py-2 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                  rows={2}
-                  disabled={isSaving}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-1">
-                  Receipt Attachment (Optional)
-                </label>
-                <div className="border-2 border-dashed border-secondary-300 rounded-lg p-4 text-center hover:border-primary-500 transition-colors relative">
-                  {attachmentFile ? (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <File className="w-6 h-6 text-primary-600" />
-                        <span className="text-sm text-secondary-700">{attachmentName}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={removeFile}
-                        className="p-1 hover:bg-red-50 rounded-lg text-red-500 hover:text-red-700"
-                      >
-                        <XCircle className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="w-8 h-8 text-secondary-400 mx-auto mb-2" />
-                      <p className="text-sm text-secondary-500">Click to upload receipt</p>
-                      <p className="text-xs text-secondary-400">Any file format (No size limit)</p>
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-secondary-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddModalOpen(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-secondary-700"
-                  disabled={isSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Add Payment
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Edit Payment Modal */}
       {isEditModalOpen && selectedPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
@@ -1571,11 +1193,8 @@ const BillingHistory: React.FC = () => {
         }}
         onConfirm={confirmDelete}
         title="Delete Payment"
-        message={`Are you sure you want to delete this payment record?`}
-        description={`This will permanently delete the payment of ${selectedPayment ? formatCurrency(selectedPayment.amount) : ''} for ${selectedPayment?.school_name || ''}. This action cannot be undone.`}
-        confirmText="Delete Payment"
+        message={`Are you sure you want to delete this payment record? This action cannot be undone.`}
         isLoading={isDeleting}
-        variant="danger"
       />
     </div>
   );

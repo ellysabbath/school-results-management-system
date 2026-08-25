@@ -122,12 +122,11 @@ const SchoolModal: React.FC<SchoolModalProps> = ({
         status: formData.status,
       };
 
-      let response;
       if (mode === 'edit' && school?.id) {
-        response = await schoolService.updateSchool(school.id, apiData);
+        await schoolService.updateSchool(school.id, apiData);
         toast.success('School updated successfully!');
       } else {
-        response = await schoolService.createSchool(apiData);
+        await schoolService.createSchool(apiData);
         toast.success('School created successfully!');
       }
 

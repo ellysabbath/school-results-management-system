@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import { 
-  BarChart3, TrendingUp, Users, Building2, 
-  DollarSign, Download, Calendar, Filter,
-  ArrowUp, ArrowDown, PieChart as PieChartIcon,
-  Loader2, RefreshCw, School, Hash, AlertCircle,
-  CheckCircle, XCircle, Clock
+  BarChart3, TrendingUp, Building2, 
+  DollarSign, Download, Calendar,
+  ArrowUp,
+  PieChart as PieChartIcon,
+  Loader2, RefreshCw, School
 } from 'lucide-react';
 import {
   LineChart,
@@ -21,11 +20,9 @@ import {
   PieChart,
   Pie,
   Cell,
-  Area,
-  AreaChart,
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
-import { schoolService, subscriptionService, systemService } from '../../api/schoolApi';
+import { schoolService, paymentService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 
 interface School {
@@ -46,17 +43,27 @@ interface School {
   created_at: string;
 }
 
-interface Subscription {
+interface Transaction {
   id: number;
+  transaction_code: string;
   school: number;
-  school_name: string;
   school_code: string;
+  school_name: string;
+  admin_email: string;
+  admin_name: string;
+  admin_phone: string;
   plan: number;
   plan_name: string;
-  plan_display_name: string;
+  plan_price: number;
+  currency: string;
+  amount: number;
+  formatted_amount?: string;
+  payment_method: string;
+  telecom_provider: string;
+  transaction_reference: string;
   status: string;
-  days_remaining: number;
-  is_active: boolean;
+  created_at: string;
+  completed_at: string;
 }
 
 interface SystemStats {
@@ -72,11 +79,9 @@ interface SystemStats {
 }
 
 const SystemAnalytics: React.FC = () => {
-  const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   
   const [schools, setSchools] = useState<School[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [stats, setStats] = useState<SystemStats>({
     total_schools: 0,
     active_schools: 0,
@@ -93,12 +98,7 @@ const SystemAnalytics: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [growthData, setGrowthData] = useState<any[]>([]);
-  const [planDistribution, setPlanDistribution] = useState([
-    { name: 'Trial', value: 0 },
-    { name: 'Starter', value: 0 },
-    { name: 'Professional', value: 0 },
-    { name: 'Enterprise', value: 0 },
-  ]);
+
   const [statusDistribution, setStatusDistribution] = useState([
     { name: 'Active', value: 0 },
     { name: 'Expired', value: 0 },
@@ -106,130 +106,21 @@ const SystemAnalytics: React.FC = () => {
   ]);
   const [topSchools, setTopSchools] = useState<any[]>([]);
 
-  const COLORS = ['#3b82f6', '#22c55e', '#8b5cf6', '#f59e0b'];
+  
   const STATUS_COLORS = ['#22c55e', '#ef4444', '#f59e0b'];
 
-  // Fetch all data
-  const fetchAllData = useCallback(async () => {
-    setIsLoading(true);
-    
-    try {
-      // Fetch schools
-      const schoolsResponse = await schoolService.getSchools({ page_size: 100 });
-      const schoolData = schoolsResponse.results || schoolsResponse;
-      setSchools(schoolData);
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
 
-      // Fetch subscriptions
-      const subsResponse = await subscriptionService.getSubscriptions({ page_size: 100 });
-      const subData = subsResponse.results || subsResponse;
-      setSubscriptions(subData);
-
-      // Calculate stats
-      const activeSchools = schoolData.filter((s: School) => s.status === 'active').length;
-      const expiredSchools = schoolData.filter((s: School) => s.status === 'expired').length;
-      const suspendedSchools = schoolData.filter((s: School) => s.status === 'suspended').length;
-      
-      const totalStudents = schoolData.reduce((acc: number, s: School) => acc + (s.total_students || 0), 0);
-      const totalTeachers = schoolData.reduce((acc: number, s: School) => acc + (s.total_teachers || 0), 0);
-
-      // Calculate revenue from subscriptions
-      const monthlyRevenue = subData.reduce((acc: number, s: any) => {
-        if (s.plan_name === 'starter') return acc + 15000;
-        if (s.plan_name === 'professional') return acc + 35000;
-        if (s.plan_name === 'enterprise') return acc + 75000;
-        return acc + 0;
-      }, 0);
-
-      setStats({
-        total_schools: schoolData.length,
-        active_schools: activeSchools,
-        expired_schools: expiredSchools,
-        suspended_schools: suspendedSchools,
-        total_students: totalStudents,
-        total_teachers: totalTeachers,
-        monthly_revenue: monthlyRevenue,
-        total_revenue: monthlyRevenue * 12,
-        growth_rate: 12.5,
-      });
-
-      // Calculate plan distribution
-      const trial = subData.filter((s: any) => s.plan_name === 'trial').length;
-      const starter = subData.filter((s: any) => s.plan_name === 'starter').length;
-      const professional = subData.filter((s: any) => s.plan_name === 'professional').length;
-      const enterprise = subData.filter((s: any) => s.plan_name === 'enterprise').length;
-
-      setPlanDistribution([
-        { name: 'Trial', value: trial },
-        { name: 'Starter', value: starter },
-        { name: 'Professional', value: professional },
-        { name: 'Enterprise', value: enterprise },
-      ]);
-
-      // Calculate status distribution
-      const active = schoolData.filter((s: School) => s.status === 'active').length;
-      const expired = schoolData.filter((s: School) => s.status === 'expired').length;
-      const suspended = schoolData.filter((s: School) => s.status === 'suspended').length;
-
-      setStatusDistribution([
-        { name: 'Active', value: active },
-        { name: 'Expired', value: expired },
-        { name: 'Suspended', value: suspended },
-      ]);
-
-      // Generate revenue data for chart
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-      const revenueChartData = months.map((month, idx) => ({
-        month,
-        revenue: monthlyRevenue * (0.6 + (idx / 6) * 0.4),
-        subscriptions: subData.length * (0.5 + (idx / 6) * 0.5),
-      }));
-      setRevenueData(revenueChartData);
-
-      // Generate growth data
-      const growthChartData = months.map((month, idx) => ({
-        month,
-        schools: schoolData.length * (0.5 + (idx / 6) * 0.5),
-        students: totalStudents * (0.5 + (idx / 6) * 0.5),
-        revenue: monthlyRevenue * (0.6 + (idx / 6) * 0.4),
-      }));
-      setGrowthData(growthChartData);
-
-      // Top schools
-      const top = schoolData
-        .map(s => ({
-          schoolName: s.name,
-          schoolCode: s.school_code,
-          studentCount: s.total_students || 0,
-          revenue: s.plan === 'enterprise' ? 75000 : s.plan === 'professional' ? 35000 : s.plan === 'starter' ? 15000 : 0,
-          growth: Math.floor(Math.random() * 30) + 5,
-          plan: s.plan,
-          status: s.status,
-        }))
-        .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
-      setTopSchools(top);
-
-    } catch (error: any) {
-      console.error('Failed to fetch analytics data:', error);
-      toast.error(error.response?.data?.message || 'Failed to load analytics data');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Load data on mount
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchAllData();
-    }
-  }, [isAuthenticated, fetchAllData]);
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'TZS',
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const getPlanRevenue = (planName: string): number => {
+    const planRevenue: Record<string, number> = {
+      trial: 0,
+      starter: 15000,
+      professional: 35000,
+      enterprise: 75000,
+    };
+    return planRevenue[planName] || 0;
   };
 
   const getPlanLabel = (plan: string): string => {
@@ -252,27 +143,257 @@ const SystemAnalytics: React.FC = () => {
     return colors[plan] || 'bg-gray-100 text-gray-700';
   };
 
-  const getStatusColor = (status: string): string => {
-    const colors: Record<string, string> = {
-      active: 'bg-green-100 text-green-700',
-      expired: 'bg-red-100 text-red-700',
-      suspended: 'bg-yellow-100 text-yellow-700',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-700';
+  const formatCurrency = (amount: number): string => {
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      return 'TZS 0';
+    }
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'TZS',
+      minimumFractionDigits: 0,
+    }).format(amount);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'expired':
-        return <XCircle className="w-4 h-4 text-red-500" />;
-      case 'suspended':
-        return <AlertCircle className="w-4 h-4 text-yellow-500" />;
-      default:
-        return <Clock className="w-4 h-4 text-gray-400" />;
-    }
+  const getMonthName = (monthIndex: number): string => {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[monthIndex] || 'Jan';
   };
+
+  // ============================================
+  // CALCULATION FUNCTIONS FROM TRANSACTIONS
+  // ============================================
+
+  const calculateMonthlyRevenue = (transactionsData: Transaction[]): number => {
+    return transactionsData.reduce((acc, t) => {
+      const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+      return acc + amount;
+    }, 0);
+  };
+
+  const calculateTotalRevenue = (transactionsData: Transaction[]): number => {
+    return transactionsData.reduce((acc, t) => {
+      const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+      return acc + amount;
+    }, 0);
+  };
+
+  const calculateRevenueByMonth = (transactionsData: Transaction[]): Record<string, number> => {
+    const revenueByMonth: Record<string, number> = {};
+    
+    for (let i = 0; i < 12; i++) {
+      const monthName = getMonthName(i);
+      revenueByMonth[monthName] = 0;
+    }
+
+    transactionsData.forEach(t => {
+      const date = new Date(t.created_at || t.completed_at);
+      const monthIndex = date.getMonth();
+      const monthName = getMonthName(monthIndex);
+      const amount = typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+      revenueByMonth[monthName] = (revenueByMonth[monthName] || 0) + amount;
+    });
+
+    return revenueByMonth;
+  };
+
+  const calculateGrowthByMonth = (
+    schoolsData: School[],
+    transactionsData: Transaction[],
+    totalStudents: number
+  ): any[] => {
+    const monthlyData = [];
+    const revenueByMonth = calculateRevenueByMonth(transactionsData);
+
+    const schoolsByMonth: Record<string, number> = {};
+    for (let i = 0; i < 12; i++) {
+      const monthName = getMonthName(i);
+      schoolsByMonth[monthName] = 0;
+    }
+
+    schoolsData.forEach(school => {
+      const date = new Date(school.created_at);
+      const monthIndex = date.getMonth();
+      const monthName = getMonthName(monthIndex);
+      schoolsByMonth[monthName] = (schoolsByMonth[monthName] || 0) + 1;
+    });
+
+    let cumulativeSchools = 0;
+    let cumulativeStudents = 0;
+    let cumulativeRevenue = 0;
+
+    for (let i = 0; i < 12; i++) {
+      const monthName = getMonthName(i);
+      
+      cumulativeSchools += schoolsByMonth[monthName] || 0;
+      cumulativeStudents += Math.round(totalStudents / 12);
+      cumulativeRevenue += revenueByMonth[monthName] || 0;
+
+      monthlyData.push({
+        month: monthName,
+        schools: cumulativeSchools,
+        students: cumulativeStudents,
+        revenue: cumulativeRevenue,
+      });
+    }
+
+    return monthlyData;
+  };
+
+  // ============================================
+  // FETCH ALL DATA (NO FILTERS)
+  // ============================================
+
+  const fetchAllData = useCallback(async () => {
+    setIsLoading(true);
+    
+    try {
+      // Fetch ALL schools (no filters)
+      const schoolsResponse = await schoolService.getSchools({ page_size: 1000 });
+      const schoolData = schoolsResponse.results || schoolsResponse || [];
+      setSchools(schoolData);
+
+      // Fetch ALL transactions (no filters)
+      const transactionsResponse = await paymentService.getTransactions({ page_size: 1000 });
+      let transactionData: Transaction[] = transactionsResponse.results || transactionsResponse || [];
+      
+      transactionData = transactionData.map(t => ({
+        ...t,
+        amount: typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount,
+        plan_price: typeof t.plan_price === 'string' ? parseFloat(t.plan_price) : t.plan_price,
+      }));
+
+      // Fetch ALL subscriptions (no filters)
+    
+
+      // Calculate stats from ALL data
+      const activeSchools = schoolData.filter((s: School) => s.status === 'active').length;
+      const expiredSchools = schoolData.filter((s: School) => s.status === 'expired').length;
+      const suspendedSchools = schoolData.filter((s: School) => s.status === 'suspended').length;
+      
+      const totalStudents = schoolData.reduce((acc: number, s: School) => acc + (s.total_students || 0), 0);
+      const totalTeachers = schoolData.reduce((acc: number, s: School) => acc + (s.total_teachers || 0), 0);
+
+      // Calculate revenue from ALL transactions
+      const monthlyRevenue = calculateMonthlyRevenue(transactionData);
+      const totalRevenue = calculateTotalRevenue(transactionData);
+
+      // Calculate growth rate (month over month from transactions)
+      const revenueByMonth = calculateRevenueByMonth(transactionData);
+      const monthKeys = Object.keys(revenueByMonth);
+      const lastMonthIndex = monthKeys.length - 1;
+      const prevMonthIndex = lastMonthIndex - 1;
+      
+      const currentRevenue = revenueByMonth[monthKeys[lastMonthIndex]] || 0;
+      const previousRevenue = revenueByMonth[monthKeys[prevMonthIndex]] || 0;
+      const growthRate = previousRevenue > 0 
+        ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 
+        : 0;
+
+      setStats({
+        total_schools: schoolData.length,
+        active_schools: activeSchools,
+        expired_schools: expiredSchools,
+        suspended_schools: suspendedSchools,
+        total_students: totalStudents,
+        total_teachers: totalTeachers,
+        monthly_revenue: monthlyRevenue,
+        total_revenue: totalRevenue,
+        growth_rate: Math.round(growthRate * 100) / 100,
+      });
+
+  
+
+      // Calculate status distribution from ALL schools
+      const active = schoolData.filter((s: School) => s.status === 'active').length;
+      const expired = schoolData.filter((s: School) => s.status === 'expired').length;
+      const suspended = schoolData.filter((s: School) => s.status === 'suspended').length;
+
+      setStatusDistribution([
+        { name: 'Active', value: active },
+        { name: 'Expired', value: expired },
+        { name: 'Suspended', value: suspended },
+      ]);
+
+      // Generate revenue data for chart - full year from ALL transactions
+      const revenueByMonthData = calculateRevenueByMonth(transactionData);
+      const revenueChartData = Object.entries(revenueByMonthData).map(([month, revenue]) => ({
+        month,
+        revenue: Math.round(revenue),
+        transactions: transactionData.filter(t => {
+          const date = new Date(t.created_at);
+          const monthIndex = date.getMonth();
+          const subMonth = getMonthName(monthIndex);
+          return subMonth === month;
+        }).length,
+      }));
+      setRevenueData(revenueChartData);
+
+      // Generate growth data - full year from ALL data
+      const growthChartData = calculateGrowthByMonth(
+        schoolData,
+        transactionData,
+        totalStudents
+      );
+      setGrowthData(growthChartData);
+
+      // Calculate top schools based on ALL transaction revenue
+      const schoolRevenueMap: Record<string, any> = {};
+      
+      transactionData.forEach(t => {
+        const key = t.school_code || t.school.toString();
+        if (!schoolRevenueMap[key]) {
+          schoolRevenueMap[key] = {
+            schoolName: t.school_name || 'Unknown',
+            schoolCode: t.school_code || 'N/A',
+            revenue: 0,
+            transactions: 0,
+            plan: 'starter',
+            status: 'active',
+            studentCount: 0,
+          };
+        }
+        schoolRevenueMap[key].revenue += typeof t.amount === 'number' ? t.amount : parseFloat(String(t.amount)) || 0;
+        schoolRevenueMap[key].transactions += 1;
+        
+        const school = schoolData.find((s: School) => s.school_code === t.school_code);
+        if (school) {
+          schoolRevenueMap[key].plan = school.plan || 'starter';
+          schoolRevenueMap[key].status = school.status || 'active';
+          schoolRevenueMap[key].studentCount = school.total_students || 0;
+        }
+      });
+
+      const top = Object.values(schoolRevenueMap)
+        .sort((a: any, b: any) => b.revenue - a.revenue)
+        .slice(0, 5)
+        .map((s: any, idx: number) => ({
+          ...s,
+          growth: Math.floor(Math.random() * 30) + 5,
+          rank: idx + 1,
+        }));
+      setTopSchools(top);
+
+    } catch (error: any) {
+      console.error('Failed to fetch analytics data:', error);
+      toast.error(error.response?.data?.message || 'Failed to load analytics data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchAllData();
+    }
+  }, [isAuthenticated, fetchAllData]);
+
+  // ============================================
+  // EXPORT FUNCTION
+  // ============================================
 
   const handleExportReport = async () => {
     setIsExporting(true);
@@ -285,7 +406,7 @@ const SystemAnalytics: React.FC = () => {
         s.total_students || 0,
         s.total_teachers || 0,
         s.status,
-        s.plan === 'enterprise' ? 75000 : s.plan === 'professional' ? 35000 : s.plan === 'starter' ? 15000 : 0,
+        getPlanRevenue(s.plan),
         new Date(s.created_at).toLocaleDateString()
       ]);
       
@@ -310,6 +431,10 @@ const SystemAnalytics: React.FC = () => {
       setIsExporting(false);
     }
   };
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   if (!isAuthenticated) {
     return (
@@ -366,7 +491,7 @@ const SystemAnalytics: React.FC = () => {
           </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors text-sm">
             <Calendar className="w-4 h-4" />
-            This Month
+            Yearly View
           </button>
         </div>
       </div>
@@ -376,7 +501,7 @@ const SystemAnalytics: React.FC = () => {
         <div className="bg-white rounded-xl border border-secondary-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-secondary-400">Total Revenue</p>
+              <p className="text-xs text-secondary-400">Total Revenue (Annual)</p>
               <p className="text-lg font-bold text-secondary-900">{formatCurrency(stats.total_revenue)}</p>
             </div>
             <div className="p-2 bg-green-50 rounded-lg">
@@ -395,7 +520,7 @@ const SystemAnalytics: React.FC = () => {
         <div className="bg-white rounded-xl border border-secondary-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-secondary-400">MRR</p>
+              <p className="text-xs text-secondary-400">Monthly Recurring Revenue</p>
               <p className="text-lg font-bold text-secondary-900">{formatCurrency(stats.monthly_revenue)}</p>
             </div>
             <div className="p-2 bg-blue-50 rounded-lg">
@@ -405,7 +530,7 @@ const SystemAnalytics: React.FC = () => {
           <div className="flex items-center gap-1 mt-1">
             <span className="text-xs text-green-600 flex items-center gap-1">
               <ArrowUp className="w-3 h-3" />
-              12.5%
+              {Math.round((stats.growth_rate / 12) * 100) / 100}%
             </span>
             <span className="text-xs text-secondary-400">MoM</span>
           </div>
@@ -426,9 +551,9 @@ const SystemAnalytics: React.FC = () => {
           <div className="flex items-center gap-1 mt-1">
             <span className="text-xs text-green-600 flex items-center gap-1">
               <ArrowUp className="w-3 h-3" />
-              8.2%
+              {Math.round((stats.growth_rate / 6) * 100) / 100}%
             </span>
-            <span className="text-xs text-secondary-400">vs last month</span>
+            <span className="text-xs text-secondary-400">vs last year</span>
           </div>
         </div>
 
@@ -447,7 +572,7 @@ const SystemAnalytics: React.FC = () => {
           <div className="flex items-center gap-1 mt-1">
             <span className="text-xs text-green-600 flex items-center gap-1">
               <ArrowUp className="w-3 h-3" />
-              5.3%
+              {Math.round((stats.growth_rate / 4) * 100) / 100}%
             </span>
             <span className="text-xs text-secondary-400">improvement</span>
           </div>
@@ -455,10 +580,10 @@ const SystemAnalytics: React.FC = () => {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         <div className="bg-white rounded-xl border border-secondary-200 p-6">
-          <h3 className="font-semibold text-secondary-900 mb-4">Growth Trends</h3>
-          {growthData.length === 0 ? (
+          <h3 className="font-semibold text-secondary-900 mb-4">Growth Trends (Yearly)</h3>
+          {growthData.length === 0 || growthData.every(d => d.schools === 0 && d.students === 0 && d.revenue === 0) ? (
             <div className="flex items-center justify-center h-[300px] text-secondary-400">
               <p>No data available</p>
             </div>
@@ -468,7 +593,7 @@ const SystemAnalytics: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="month" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" />
-                <Tooltip />
+                <Tooltip formatter={(value: any) => typeof value === 'number' ? value.toLocaleString() : value} />
                 <Legend />
                 <Line type="monotone" dataKey="schools" stroke="#3b82f6" strokeWidth={2} name="Schools" />
                 <Line type="monotone" dataKey="students" stroke="#8b5cf6" strokeWidth={2} name="Students" />
@@ -478,36 +603,7 @@ const SystemAnalytics: React.FC = () => {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-secondary-200 p-6">
-          <h3 className="font-semibold text-secondary-900 mb-4">Plan Distribution</h3>
-          {planDistribution.every(d => d.value === 0) ? (
-            <div className="flex items-center justify-center h-[300px] text-secondary-400">
-              <p>No data available</p>
-            </div>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={planDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {planDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </>
-          )}
-        </div>
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -530,7 +626,7 @@ const SystemAnalytics: React.FC = () => {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {statusDistribution.map((entry, index) => (
+                    {statusDistribution.map((_entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
                     ))}
                   </Pie>
@@ -550,7 +646,7 @@ const SystemAnalytics: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {topSchools.map((school, idx) => (
+              {topSchools.map((school: any, idx: number) => (
                 <div key={idx} className="flex items-center gap-3 p-2 bg-secondary-50 rounded-lg">
                   <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 font-medium text-sm">
                     {idx + 1}
@@ -560,9 +656,11 @@ const SystemAnalytics: React.FC = () => {
                     <div className="flex items-center gap-2 text-xs text-secondary-400">
                       <span className="font-mono text-xs">{school.schoolCode || 'N/A'}</span>
                       <span>•</span>
-                      <span>{school.studentCount} students</span>
+                      <span>{school.studentCount || 0} students</span>
                       <span>•</span>
                       <span className="text-green-600">↑ {school.growth}%</span>
+                      <span>•</span>
+                      <span>{school.transactions || 0} transactions</span>
                     </div>
                   </div>
                   <div className="text-right">
@@ -578,12 +676,12 @@ const SystemAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* Revenue Breakdown */}
+      {/* Revenue Breakdown - Full Year */}
       <div className="bg-white rounded-xl border border-secondary-200 p-6">
-        <h3 className="font-semibold text-secondary-900 mb-4">Monthly Revenue Breakdown</h3>
-        {revenueData.length === 0 ? (
+        <h3 className="font-semibold text-secondary-900 mb-4">Monthly Revenue Breakdown (Full Year)</h3>
+        {revenueData.length === 0 || revenueData.every(d => d.revenue === 0) ? (
           <div className="flex items-center justify-center h-[300px] text-secondary-400">
-            <p>No data available</p>
+            <p>No transaction data available</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>

@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
-  Check, Crown, Sparkles, Star, Zap, CreditCard, TrendingUp, Loader2,
+  CreditCard, TrendingUp, Loader2,
   Plus, Edit, Trash2, X, Save, RefreshCw, Search,
-  DollarSign, Users, BookOpen, Award, Shield, 
-  Calendar, Clock, AlertCircle, ChevronLeft, ChevronRight,
-  Eye, FileText, Printer, Download, Hash, Mail, Phone,
-  Building2, Smartphone, Tag, Filter, User, Upload,
-  CheckCircle2, XCircle, Wallet, Receipt
+  DollarSign, 
+  Clock, ChevronLeft, ChevronRight,
+  Eye, FileText, 
+  Building2, Tag, User, Upload,
+  CheckCircle2, XCircle, Wallet, Receipt,
+  Hash,
+  Mail,
+  Phone
 } from 'lucide-react';
-import { paymentService, subscriptionService } from '../../api/schoolApi';
+import { paymentService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal';
 
@@ -60,7 +62,6 @@ interface TransactionFormData {
 }
 
 const SubscriptionPlans: React.FC = () => {
-  const navigate = useNavigate();
   
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
@@ -1288,6 +1289,7 @@ const SubscriptionPlans: React.FC = () => {
       )}
 
       {/* Delete Confirmation Modal */}
+           {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
         onClose={() => {
@@ -1297,10 +1299,7 @@ const SubscriptionPlans: React.FC = () => {
         onConfirm={confirmDelete}
         title="Delete Transaction"
         message={`Are you sure you want to delete this transaction?`}
-        description={`This will permanently delete the transaction of ${transactionToDelete ? formatCurrency(transactionToDelete.amount) : ''} for ${transactionToDelete?.school_name || ''}. This action cannot be undone.`}
-        confirmText="Delete Transaction"
         isLoading={isProcessing}
-        variant="danger"
       />
     </div>
   );

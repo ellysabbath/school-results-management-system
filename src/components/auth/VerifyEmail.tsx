@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   CheckCircle, XCircle, Loader2, Mail, Building2, ArrowRight, 
-  Zap, CreditCard, GraduationCap, Users, BookOpen, Award,
-  Shield, Sparkles, Star, Crown
+  Zap, CreditCard, Award,
+  Shield, Sparkles, Star, Crown, GraduationCap
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -132,13 +132,9 @@ const VerifyEmail: React.FC = () => {
     });
   };
 
-  const goToRegister = () => {
-    navigate('/register-school', { state: { email: userEmail } });
-  };
-
   const renderPricingSection = () => (
     <div className="w-full max-w-5xl animate-slide-up mt-8">
-      <div className="bg-white rounded-2xl shadow-xl border border-secondary-200 p-8">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
             <Sparkles className="w-4 h-4" />
@@ -236,13 +232,26 @@ const VerifyEmail: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md animate-slide-up">
-        <div className="bg-white rounded-2xl shadow-xl border border-secondary-200 p-8 text-center">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center">
+          {/* Header with Logo */}
+          <div className="mb-6">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl shadow-lg shadow-blue-500/20">
+                <GraduationCap className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <h1 className="text-2xl font-bold text-gray-800">School</h1>
+              <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded">Manager</span>
+            </div>
+          </div>
+
           <div className="mb-6">
             {status === 'verifying' && (
-              <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto">
-                <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
+                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
               </div>
             )}
             {status === 'success' && (
@@ -257,13 +266,13 @@ const VerifyEmail: React.FC = () => {
             )}
           </div>
 
-          <h1 className="text-2xl font-bold text-secondary-900 mb-2">
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">
             {status === 'verifying' && 'Verifying Email'}
             {status === 'success' && 'Email Verified! 🎉'}
             {status === 'error' && 'Verification Failed'}
           </h1>
           
-          <p className="text-secondary-600 mb-6">{message}</p>
+          <p className="text-gray-600 mb-6">{message}</p>
 
           {status === 'success' && (
             <div className="space-y-4">
@@ -276,20 +285,20 @@ const VerifyEmail: React.FC = () => {
                 </div>
               )}
               
-              <div className="p-4 bg-primary-50 rounded-lg border border-primary-200">
-                <p className="text-sm text-primary-700 font-medium flex items-center justify-center gap-2">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-700 font-medium flex items-center justify-center gap-2">
                   <Building2 className="w-4 h-4" />
                   Ready to get started?
                 </p>
-                <p className="text-xs text-primary-600 mt-1">
+                <p className="text-xs text-blue-600 mt-1">
                   Choose a plan below to complete your registration.
                 </p>
               </div>
 
               {!showPricing && (
                 <div className="flex justify-center">
-                  <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
-                  <span className="ml-2 text-sm text-secondary-500">Loading plans...</span>
+                  <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                  <span className="ml-2 text-sm text-gray-500">Loading plans...</span>
                 </div>
               )}
             </div>
@@ -300,7 +309,7 @@ const VerifyEmail: React.FC = () => {
               <button
                 onClick={resendVerification}
                 disabled={isLoading}
-                className="w-full px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
               >
                 {isLoading ? (
                   <>
@@ -316,7 +325,7 @@ const VerifyEmail: React.FC = () => {
               </button>
               <Link
                 to="/login"
-                className="inline-block text-sm text-primary-600 hover:text-primary-700"
+                className="inline-block text-sm text-blue-600 hover:text-blue-700"
               >
                 Back to Login
               </Link>
@@ -324,7 +333,7 @@ const VerifyEmail: React.FC = () => {
           )}
 
           {status === 'verifying' && (
-            <p className="text-sm text-secondary-400 mt-4">
+            <p className="text-sm text-gray-400 mt-4">
               Please wait while we verify your email...
             </p>
           )}

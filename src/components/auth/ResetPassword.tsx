@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Lock, AlertCircle, CheckCircle, Loader2, Eye, EyeOff, Key } from 'lucide-react';
+import { Lock, AlertCircle, CheckCircle, Loader2, Eye, EyeOff, GraduationCap } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -75,7 +75,7 @@ const ResetPassword: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-xl border border-secondary-200 p-8">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-500/20">
-              <Key className="w-8 h-8 text-white" />
+              <GraduationCap className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-secondary-900">Reset Password</h1>
             <p className="text-secondary-500 mt-1">

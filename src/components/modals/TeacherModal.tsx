@@ -209,7 +209,7 @@ const TeacherModal: React.FC<TeacherModalProps> = ({
       setSchoolSearchResults(results);
       
       if (results.length === 0) {
-        toast.info('No schools found matching your search');
+        toast('No schools found matching your search', { icon: '🔍' });
       }
     } catch (error) {
       console.error('Failed to search schools:', error);
@@ -323,12 +323,11 @@ const TeacherModal: React.FC<TeacherModalProps> = ({
         school: formData.school,
       };
 
-      let response;
       if (mode === 'edit' && teacher?.id) {
-        response = await teacherService.updateTeacher(teacher.id, apiData);
+        await teacherService.updateTeacher(teacher.id, apiData);
         toast.success('Teacher updated successfully!');
       } else {
-        response = await teacherService.createTeacher(apiData);
+        await teacherService.createTeacher(apiData);
         toast.success('Teacher added successfully!');
       }
 

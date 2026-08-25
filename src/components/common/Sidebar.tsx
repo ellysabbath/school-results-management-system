@@ -10,7 +10,6 @@ import {
   BarChart3,
   Calendar,
   Settings,
-  Home,
   CreditCard,
   Menu,
   X,
@@ -24,18 +23,13 @@ import {
   LogIn,
   UserPlus,
   Key,
-  Activity,
-  Award,
-  TrendingUp,
   BookCopy,
   Plane,
   DollarSign,
-  Podcast,
   Mail,
   Bell,
   UserCog,
-  LucideParentheses,
-  
+  type LucideIcon,
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 import { useAuth } from '../../context/AuthContext';
@@ -50,7 +44,7 @@ interface SidebarProps {
 interface NavigationItem {
   path: string;
   label: string;
-  icon: React.ComponentType<any>;
+  icon: LucideIcon;
   section: string;
   roles: string[];
 }
@@ -229,6 +223,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       roles: ['teacher']
     },
     
+    
     // Student Section
     { 
       path: '/student-dashboard', 
@@ -263,7 +258,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
     { 
       path: '/parent-dashboard', 
       label: 'Parent Dashboard', 
-      icon: LucideParentheses,
+      icon: Users,
       section: 'Parent',
       roles: ['parent']
     },
@@ -301,20 +296,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
 
   // Filter items based on user role and authentication status
   const getFilteredItems = () => {
-    // If not authenticated, only show public items
     if (!isAuthenticated) {
       return navigationItems.filter(item => 
         item.roles.includes('guest')
       );
     }
 
-    // If authenticated, show items based on user role
     return navigationItems.filter(item => {
-      // If item has no roles specified, show it to everyone
       if (!item.roles || item.roles.length === 0) {
         return true;
       }
-      // Check if user's role is in the allowed roles
       return item.roles.includes(userRole);
     });
   };
@@ -421,40 +412,45 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
         lg:translate-x-0
         ${!isMobile && isOpen ? 'lg:w-64' : 'lg:w-20'}
       `}>
-        {/* Logo / Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            {isOpen && (
-              <div>
-                <h1 className="text-lg font-bold text-gray-800 leading-tight">School</h1>
-                <p className="text-xs text-blue-600 font-medium">Manager</p>
+        {/* Logo / Header - Fixed at top */}
+        <div className="flex-shrink-0">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
+                <GraduationCap className="w-5 h-5 text-white" />
               </div>
-            )}
-          </Link>
-          <button
-            onClick={onToggle}
-            className="p-1 hover:bg-gray-100 rounded-lg transition lg:hidden flex-shrink-0"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-          {/* Desktop toggle button */}
-          <button
-            onClick={onToggle}
-            className="p-1 hover:bg-gray-100 rounded-lg transition hidden lg:block flex-shrink-0"
-          >
-            {isOpen ? (
+              {isOpen && (
+                <div>
+                  <h1 className="text-lg font-bold text-gray-800 leading-tight">School</h1>
+                  <p className="text-xs text-blue-600 font-medium">Manager</p>
+                </div>
+              )}
+            </Link>
+            <button
+              onClick={onToggle}
+              className="p-1 hover:bg-gray-100 rounded-lg transition lg:hidden flex-shrink-0"
+            >
               <X className="w-5 h-5 text-gray-500" />
-            ) : (
-              <Menu className="w-5 h-5 text-gray-500" />
-            )}
-          </button>
+            </button>
+            {/* Desktop toggle button */}
+            <button
+              onClick={onToggle}
+              className="p-1 hover:bg-gray-100 rounded-lg transition hidden lg:block flex-shrink-0"
+            >
+              {isOpen ? (
+                <X className="w-5 h-5 text-gray-500" />
+              ) : (
+                <Menu className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Navigation Menu - Scrollable area */}
-        <nav className="p-2 space-y-2 overflow-y-auto flex-1" style={{ height: 'calc(100vh - 200px)' }}>
+        {/* Navigation Menu - Scrollable area with padding for footer */}
+        <nav className="p-2 space-y-2 overflow-y-auto" style={{ 
+          height: isOpen ? 'calc(100vh - 240px)' : 'calc(100vh - 180px)',
+          paddingBottom: isOpen ? '16px' : '8px'
+        }}>
           {Object.entries(groupedMenuItems).map(([section, items]) => (
             <div key={section}>
               {/* Section Header */}
@@ -488,19 +484,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
         </nav>
 
         {/* Footer - User Info & Subscription Card - Fixed at bottom */}
-        <div className={`flex-shrink-0 border-t border-gray-200 bg-gray-50/50 ${
-          isOpen ? 'p-4' : 'p-2'
-        }`}>
+        <div className={`flex-shrink-0 border-t border-gray-200 bg-gray-50/50 ${isOpen ? 'p-4' : 'p-2'}`}>
           {isAuthenticated && user && (
             <div className="mb-2">
               {isOpen ? (
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-white rounded-lg border border-gray-100">
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
-                    {user.full_name?.charAt(0) || user.username?.charAt(0) || 'U'}
+                    {user.first_name?.charAt(0) || user.username?.charAt(0) || 'U'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
-                      {user.full_name || user.username || 'User'}
+                      {user.first_name && user.last_name 
+                        ? `${user.first_name} ${user.last_name}` 
+                        : user.username || 'User'}
                     </p>
                     <p className="text-xs text-gray-400 truncate capitalize">
                       {user.role?.replace('_', ' ') || 'User'}
@@ -509,29 +505,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
                 </div>
               ) : (
                 <div className="w-8 h-8 mx-auto bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
-                  {user.full_name?.charAt(0) || user.username?.charAt(0) || 'U'}
+                  {user.first_name?.charAt(0) || user.username?.charAt(0) || 'U'}
                 </div>
               )}
             </div>
           )}
           
           {isOpen ? (
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-4 text-white">
-              <p className="text-xs font-medium opacity-80">Subscription</p>
-              <p className="text-lg font-bold">Premium</p>
-              <p className="text-xs opacity-75">30 days remaining</p>
-              <Link
-                to="/payment"
-                className="mt-2 inline-block bg-white text-blue-700 text-xs px-3 py-1 rounded hover:bg-gray-100 transition"
-              >
-                <CreditCard className="w-3 h-3 inline mr-1" />
-                Upgrade
-              </Link>
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-4 text-white shadow-lg shadow-blue-500/20">
+              <div className="flex items-center justify-between">
+                {/* <div>
+                  <p className="text-xs font-medium opacity-80">Current Plan</p>
+                  <p className="text-lg font-bold">Premium</p>
+                  <p className="text-xs opacity-75">30 days remaining</p>
+                </div> */}
+                <Link
+                  to="/payment"
+                  className="bg-white text-blue-700 text-xs px-3 py-1.5 rounded-lg hover:bg-gray-100 transition font-medium shadow-md"
+                >
+                  <CreditCard className="w-3 h-3 inline mr-1" />
+                  TopUp now
+                </Link>
+              </div>
             </div>
           ) : (
             <Link
-              to="/billing"
-              className="block text-center"
+              to="/payment"
+              className="block text-center p-2 rounded-lg hover:bg-blue-50 transition"
+              title="Upgrade Plan"
             >
               <CreditCard className="w-6 h-6 mx-auto text-blue-600 hover:text-blue-700 transition" />
             </Link>

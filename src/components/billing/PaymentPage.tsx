@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  ArrowLeft, CreditCard, Lock, Shield, Check, AlertCircle, Loader2,
-  Wallet, Building2, Smartphone, Banknote, Calendar, User,
-  Mail, Phone, MapPin, FileText, Receipt, CheckCircle2,
-  XCircle, Clock, DollarSign, Zap, Sparkles, Crown, Star,
-  Upload, School, Hash, Send, CheckCircle, UserCircle, 
-  Briefcase, PhoneCall, MessageCircle, Smartphone as SmartphoneIcon,
-  CreditCard as CreditCardIcon, Building, Globe, Home,
-  File, Image, Paperclip, Download, Printer, ChevronDown, Award,
-  Phone as PhoneIcon
+  ArrowLeft, CreditCard, Lock, Shield, Loader2,
+  Building2, 
+  Mail, Phone, FileText, CheckCircle2,
+  XCircle, DollarSign,
+  Upload, School, Hash, Send, 
+  PhoneCall, MessageCircle, Smartphone as SmartphoneIcon,
+  CreditCard as CreditCardIcon,
+  File,
+  Phone as PhoneIcon,
+  User
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { paymentService, schoolService, subscriptionService } from '../../api/schoolApi';
+import { paymentService, schoolService } from '../../api/schoolApi';
 import toast from 'react-hot-toast';
 
 interface PaymentFormData {
@@ -65,18 +66,6 @@ interface TeslaTransaction {
   receipt_filename: string;
   initiated_at: string;
   completed_at: string;
-}
-
-interface School {
-  id: number;
-  name: string;
-  school_code: string;
-  email: string;
-  phone: string;
-  plan: string;
-  status: string;
-  admin_name: string;
-  admin_email: string;
 }
 
 interface Plan {
@@ -135,7 +124,7 @@ const PaymentPage: React.FC = () => {
     }
   ];
 
-  const [availablePlans, setAvailablePlans] = useState<Plan[]>(staticPlans);
+  const [availablePlans] = useState<Plan[]>(staticPlans);
   const [formData, setFormData] = useState<PaymentFormData>({
     schoolName: '',
     schoolCode: '',
@@ -156,21 +145,15 @@ const PaymentPage: React.FC = () => {
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isTransactionStarted, setIsTransactionStarted] = useState(false);
-  const [currentStage, setCurrentStage] = useState(0);
   const [transactionComplete, setTransactionComplete] = useState(false);
   const [paymentReference, setPaymentReference] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [transactionId, setTransactionId] = useState<number | null>(null);
   const [savedTransaction, setSavedTransaction] = useState<TeslaTransaction | null>(null);
   const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
   const [whatsappNumber] = useState('+255742578691');
-  const [isSaving, setIsSaving] = useState(false);
   const [isLoadingSchool, setIsLoadingSchool] = useState(false);
-  const [schoolData, setSchoolData] = useState<School | null>(null);
   const [currentUserPlan, setCurrentUserPlan] = useState<string>('');
   const [showPaymentProcedures, setShowPaymentProcedures] = useState(false);
-  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
 
   // Telecom companies with React Icons
   const telecomCompanies = [
@@ -297,7 +280,7 @@ const PaymentPage: React.FC = () => {
         name: 'Completing Payment',
         description: 'Finalizing your subscription...',
         status: 'pending' as const,
-        icon: <CheckCircle className="w-5 h-5" />,
+        icon: <CheckCircle2 className="w-5 h-5" />,
       },
     ];
 
@@ -334,7 +317,6 @@ const PaymentPage: React.FC = () => {
     if (formData.telecomCompany) {
       const stages = getTransactionStages();
       setTransactionStages(stages.map(s => ({ ...s, status: 'pending' as const })));
-      setCurrentStage(0);
       setShowPaymentProcedures(true);
     } else {
       setShowPaymentProcedures(false);
@@ -368,7 +350,6 @@ const PaymentPage: React.FC = () => {
 
         if (schoolDataList && schoolDataList.length > 0) {
           const school = schoolDataList[0];
-          setSchoolData(school);
           
           if (school.plan) {
             setCurrentUserPlan(school.plan);
@@ -385,7 +366,7 @@ const PaymentPage: React.FC = () => {
           toast.success('School data loaded successfully!');
         } else {
           console.log('[PaymentPage] No school found for user');
-          toast.info('No school found. Please register your school first.');
+          toast.error('No school found. Please register your school first.');
         }
       } catch (error: any) {
         console.error('[PaymentPage] Failed to fetch school:', error);
@@ -414,7 +395,7 @@ const PaymentPage: React.FC = () => {
       }));
       
       if (selectedPlan.name === 'trial') {
-        toast.info('Trial plan selected - 30 days free!');
+        toast.success('Trial plan selected - 30 days free!');
       } else {
         toast.success(`${selectedPlan.display_name} selected - ${formatCurrency(selectedPlan.price)} / ${selectedPlan.billing_period}`);
       }
@@ -512,9 +493,8 @@ const PaymentPage: React.FC = () => {
     }).format(amount);
   };
 
-  // Save transaction to backend - FIXED: Only send plan_name
+  // Save transaction to backend
   const saveTransactionToBackend = async () => {
-    setIsSaving(true);
     try {
       // Find the selected plan to get its name
       const selectedPlan = availablePlans.find(p => p.id === formData.planId);
@@ -529,7 +509,6 @@ const PaymentPage: React.FC = () => {
         telecom_provider: formData.telecomCompany,
         transaction_reference: formData.transactionReference,
         notes: formData.notes || '',
-        // SEND ONLY plan_name - NOT plan_id
         plan_name: selectedPlan?.name || formData.planName || 'professional',
       };
 
@@ -558,7 +537,6 @@ const PaymentPage: React.FC = () => {
 
       console.log('[PaymentPage] Transaction data:', transactionData);
 
-      setTransactionId(transactionData.id);
       setSavedTransaction(transactionData);
       
       toast.success('Transaction saved successfully!');
@@ -589,8 +567,6 @@ const PaymentPage: React.FC = () => {
         toast.error(error.response?.data?.message || error.message || 'Failed to save transaction');
       }
       throw error;
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -632,7 +608,6 @@ Thank you for your payment!
     }
 
     setIsProcessing(true);
-    setIsTransactionStarted(true);
     setShowConfirmation(true);
 
     try {
@@ -653,7 +628,6 @@ Thank you for your payment!
               status: idx === stageIndex ? 'processing' as const : s.status
             }))
           );
-          setCurrentStage(stageIndex);
           
           setTimeout(() => {
             setTransactionStages(prev => 
@@ -695,7 +669,6 @@ Thank you for your payment!
 
   // Get selected telecom
   const selectedTelecom = telecomCompanies.find(t => t.id === formData.telecomCompany);
-  const selectedPlan = availablePlans.find(p => p.id === formData.planId);
 
   if (!isAuthenticated) {
     return (
@@ -1108,7 +1081,7 @@ Thank you for your payment!
                 )}
 
                 <div className="space-y-4">
-                  {transactionStages.map((stage, index) => (
+                  {transactionStages.map((stage) => (
                     <div
                       key={stage.id}
                       className={`flex items-start gap-4 p-4 rounded-lg border transition-all ${
@@ -1172,7 +1145,7 @@ Thank you for your payment!
                       </div>
                       {stage.status === 'completed' && (
                         <div className="text-green-600">
-                          <CheckCircle className="w-5 h-5" />
+                          <CheckCircle2 className="w-5 h-5" />
                         </div>
                       )}
                     </div>

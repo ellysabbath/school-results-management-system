@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Search, Filter, Eye, Printer, Download, 
+  Search, Printer, Download, 
   Loader2, User, AlertCircle, RefreshCw, X,
   ChevronLeft, ChevronRight, School, Hash,
-  FileText, Calendar, BookOpen, Users, 
-  CheckCircle, XCircle, Clock, ArrowRight,
-  Plus, Edit, Trash2, BarChart, Award,
-  Mail, Send, Check, FileDown, MailCheck,
+  FileText, 
+  CheckCircle, 
+  ArrowRight,
+  Plus, BarChart,
+  Mail, Send, FileDown, MailCheck,
   ChevronDown, ChevronUp, FileSpreadsheet,
-  Share2, EyeOff, Globe, Lock
+  Globe, Lock
 } from 'lucide-react';
 import { resultService, studentService, subjectService, schoolService, termService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
@@ -115,10 +116,6 @@ const getStatusBadge = (isPublished: boolean): string => {
     : 'bg-yellow-100 text-yellow-700';
 };
 
-const getStatusText = (isPublished: boolean): string => {
-  return isPublished ? 'Published' : 'Draft';
-};
-
 const getGradePoint = (grade: string): number => {
   const points: Record<string, number> = {
     'A': 5.0,
@@ -147,7 +144,6 @@ const ResultManagement: React.FC = () => {
 
   // Data States
   const [results, setResults] = useState<Result[]>([]);
-  const [filteredResults, setFilteredResults] = useState<Result[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
@@ -163,7 +159,6 @@ const ResultManagement: React.FC = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [bulkDownloadFormat, setBulkDownloadFormat] = useState<'pdf' | 'excel'>('pdf');
   
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -741,6 +736,24 @@ const ResultManagement: React.FC = () => {
         fileName = `bulk_results_${currentSchoolInfo.code}_${dateStr}.xlsx`;
       }
       
+      // Check if the blob is actually an error response
+      if (blob instanceof Blob && blob.type === 'application/json') {
+        const text = await blob.text();
+        try {
+          const errorData = JSON.parse(text);
+          toast.error(errorData.message || 'Failed to generate document');
+          return;
+        } catch (e) {
+          // Not JSON, proceed with download
+        }
+      }
+      
+      // Check if blob has content
+      if (blob instanceof Blob && blob.size === 0) {
+        toast.error('Generated document is empty');
+        return;
+      }
+      
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -754,7 +767,7 @@ const ResultManagement: React.FC = () => {
       toast.success(`Successfully downloaded ${studentIds.length} student results!`);
     } catch (error: any) {
       console.error('[ResultManagement] Bulk download error:', error);
-      toast.error(error.response?.data?.message || 'Failed to download results');
+      toast.error(error.message || 'Failed to download results');
     } finally {
       setIsBulkDownloading(false);
       setIsBulkDownloadModalOpen(false);
@@ -850,7 +863,7 @@ const ResultManagement: React.FC = () => {
   };
 
   // ============================================
-  // SINGLE RESULT ACTIONS
+  // SINGLE RESULT ACTIONS - UPDATED WITH BETTER ERROR HANDLING
   // ============================================
 
   const handleDownloadPDF = async (studentId: number) => {
@@ -862,15 +875,36 @@ const ResultManagement: React.FC = () => {
         return;
       }
       
+      console.log('[ResultManagement] Downloading PDF for student:', studentId);
+      console.log('[ResultManagement] Selected term:', selectedTerm);
+      
       const pdfBlob = await resultService.getStudentResultsPDF({
         student_id: studentId,
         term_id: selectedTerm || undefined
       });
       
+      // Check if the blob is actually an error response
+      if (pdfBlob instanceof Blob && pdfBlob.type === 'application/json') {
+        const text = await pdfBlob.text();
+        try {
+          const errorData = JSON.parse(text);
+          toast.error(errorData.message || 'Failed to generate PDF');
+          return;
+        } catch (e) {
+          // Not JSON, proceed with download
+        }
+      }
+      
+      // Check if blob has content
+      if (pdfBlob instanceof Blob && pdfBlob.size === 0) {
+        toast.error('Generated PDF is empty');
+        return;
+      }
+      
       const url = window.URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `results_${student.full_name}_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = `results_${student.full_name || student.first_name}_${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -879,7 +913,7 @@ const ResultManagement: React.FC = () => {
       toast.success('PDF downloaded successfully!');
     } catch (error: any) {
       console.error('[ResultManagement] Error downloading PDF:', error);
-      toast.error(error.response?.data?.message || 'Failed to download PDF');
+      toast.error(error.message || 'Failed to download PDF');
     } finally {
       setIsDownloading(false);
     }
@@ -906,7 +940,7 @@ const ResultManagement: React.FC = () => {
 
     setIsSendingEmails(true);
     try {
-      // Send first result as single email (or you can implement bulk for single student)
+      // Send first result as single email
       const payload = {
         result_id: studentResults[0].id,
         email: student.email,
@@ -942,7 +976,6 @@ const ResultManagement: React.FC = () => {
   const handleClearSearch = () => {
     setSearchSchoolCode('');
     setResults([]);
-    setFilteredResults([]);
     setStudents([]);
     setSubjects([]);
     setTerms([]);
@@ -1032,17 +1065,6 @@ const ResultManagement: React.FC = () => {
   // ============================================
   // RENDER HELPERS
   // ============================================
-
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
 
   const getPaginatedRows = () => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -1237,7 +1259,7 @@ const ResultManagement: React.FC = () => {
                 Export
               </button>
               <button 
-                onClick={() => toast.info('Print feature coming soon')}
+                onClick={() => toast('Print feature coming soon', { icon: '🖨️' })}
                 className="flex items-center gap-2 px-4 py-2 border border-secondary-200 rounded-lg hover:bg-secondary-50 transition-colors text-sm text-secondary-600"
               >
                 <Printer className="w-4 h-4" />

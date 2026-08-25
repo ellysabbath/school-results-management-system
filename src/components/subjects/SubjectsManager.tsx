@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Plus, Search, Edit, Trash2, BookOpen, User, X, Save, 
+  Plus, Search, Edit, Trash2, BookOpen, User, X,
   School, Hash, Loader2, AlertCircle, RefreshCw, 
   Filter, ChevronLeft, ChevronRight, ArrowRight
 } from 'lucide-react';
-import { subjectService, teacherService, schoolService } from '../../api/schoolApi';
+import { subjectService, schoolService } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal';
@@ -102,54 +102,7 @@ const SubjectManager: React.FC = () => {
   const userEmail = user?.email || '';
 
   // ============================================
-  // FETCH MY SCHOOL BY ADMIN EMAIL
-  // ============================================
-
-  const fetchMySchoolByAdminEmail = useCallback(async () => {
-    if (!userEmail) {
-      toast.error('No email found for logged in user');
-      return;
-    }
-
-    setIsLoadingMySchool(true);
-    setSearchError(null);
-
-    try {
-      console.log('[SubjectManager] Fetching my school by admin email:', userEmail);
-      
-      const response = await schoolService.getSchools({
-        admin_email: userEmail,
-        page_size: 1
-      });
-      
-      console.log('[SubjectManager] My school response:', response);
-      
-      const results = response.results || response;
-      
-      if (results && results.length > 0) {
-        const schoolData = results[0];
-        const schoolCode = schoolData.school_code;
-        
-        if (schoolCode) {
-          setSearchSchoolCode(schoolCode);
-          await fetchSubjectsBySchoolCode(schoolCode);
-          toast.success(`Loaded subjects from ${schoolData.name}`);
-        } else {
-          toast.error('School code not found for your school');
-        }
-      } else {
-        toast.error('No school found for your account. Please contact administrator.');
-      }
-    } catch (error: any) {
-      console.error('[SubjectManager] Error fetching my school:', error);
-      toast.error(error.response?.data?.message || 'Failed to load your school');
-    } finally {
-      setIsLoadingMySchool(false);
-    }
-  }, [userEmail]);
-
-  // ============================================
-  // API CALLS
+  // FETCH SUBJECTS BY SCHOOL CODE
   // ============================================
 
   const fetchSubjectsBySchoolCode = useCallback(async (schoolCode: string) => {
@@ -204,7 +157,7 @@ const SubjectManager: React.FC = () => {
         setClasses(classList);
         
         if (subjectsWithCode.length === 0) {
-          toast.info(`No subjects found in ${schoolData.school_name}`);
+          toast.error(`No subjects found in ${schoolData.school_name}`);
           setSearchError(`No subjects found in ${schoolData.school_name}`);
         } else {
           toast.success(`Found ${subjectsWithCode.length} subject(s) from ${schoolData.school_name}`);
@@ -241,6 +194,53 @@ const SubjectManager: React.FC = () => {
   }, []);
 
   // ============================================
+  // FETCH MY SCHOOL BY ADMIN EMAIL
+  // ============================================
+
+  const fetchMySchoolByAdminEmail = useCallback(async () => {
+    if (!userEmail) {
+      toast.error('No email found for logged in user');
+      return;
+    }
+
+    setIsLoadingMySchool(true);
+    setSearchError(null);
+
+    try {
+      console.log('[SubjectManager] Fetching my school by admin email:', userEmail);
+      
+      const response = await schoolService.getSchools({
+        admin_email: userEmail,
+        page_size: 1
+      });
+      
+      console.log('[SubjectManager] My school response:', response);
+      
+      const results = response.results || response;
+      
+      if (results && results.length > 0) {
+        const schoolData = results[0];
+        const schoolCode = schoolData.school_code;
+        
+        if (schoolCode) {
+          setSearchSchoolCode(schoolCode);
+          await fetchSubjectsBySchoolCode(schoolCode);
+          toast.success(`Loaded subjects from ${schoolData.name}`);
+        } else {
+          toast.error('School code not found for your school');
+        }
+      } else {
+        toast.error('No school found for your account. Please contact administrator.');
+      }
+    } catch (error: any) {
+      console.error('[SubjectManager] Error fetching my school:', error);
+      toast.error(error.response?.data?.message || 'Failed to load your school');
+    } finally {
+      setIsLoadingMySchool(false);
+    }
+  }, [userEmail, fetchSubjectsBySchoolCode]);
+
+  // ============================================
   // AUTO-LOAD ON PAGE LOAD
   // ============================================
 
@@ -251,7 +251,7 @@ const SubjectManager: React.FC = () => {
     } else {
       setIsInitialLoading(false);
     }
-  }, [isAuthenticated, userEmail]);
+  }, [isAuthenticated, userEmail, fetchMySchoolByAdminEmail]);
 
   // ============================================
   // HELPER FUNCTIONS

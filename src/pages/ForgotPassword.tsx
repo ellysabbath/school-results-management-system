@@ -9,7 +9,8 @@ import {
   X,
   Send,
   Loader2,
-  Shield
+  Shield,
+  GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -66,7 +67,7 @@ const ForgotPassword: React.FC = () => {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded-full shadow-lg">
-              <Shield className="w-10 h-10 text-white" />
+              <GraduationCap className="w-10 h-10 text-white" />
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Sahau Nenosiri</h1>

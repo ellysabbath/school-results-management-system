@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Users, UserCheck, BookOpen, ClipboardList, TrendingUp, Award, 
-  Calendar, Download, Loader2, School, RefreshCw, AlertCircle,
-  CheckCircle, XCircle, BarChart3, PieChart as PieChartIcon,
-  Activity, BookMarked, GraduationCap, Target, Percent,
-  FileText, Clock, User, Mail, Settings, Bell
+  Users, UserCheck, BookOpen, ClipboardList, TrendingUp,
+  Download, Loader2, School, RefreshCw, AlertCircle,
+  CheckCircle,  BarChart3, PieChart as PieChartIcon,
+  Activity, BookMarked, Target, Percent,
+  FileText, Clock
 } from 'lucide-react';
 import StatCard from '../common/StatCard';
 import { 
@@ -12,14 +12,11 @@ import {
   studentService, 
   teacherService, 
   subjectService, 
-  resultService,
-  subscriptionService 
+  resultService
 } from '../../api/schoolApi';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,
@@ -98,8 +95,6 @@ const AdminDashboard: React.FC = () => {
   const [schoolName, setSchoolName] = useState<string>('');
   const [schoolCode, setSchoolCode] = useState<string>('');
   const [selectedTerm, setSelectedTerm] = useState<string>('Current');
-  const [terms, setTerms] = useState<{id: number; name: string; academic_year: string}[]>([]);
-  const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
   const [availableTerms, setAvailableTerms] = useState<string[]>([]);
 
   // ============================================
@@ -119,13 +114,11 @@ const AdminDashboard: React.FC = () => {
       const userEmail = user.email;
       let schoolData = null;
       let schoolCodeValue = '';
-      let schoolIdValue = null;
 
       // If school is provided from context, use it
       if (school) {
         schoolData = school;
         schoolCodeValue = school.school_code || '';
-        schoolIdValue = school.id;
         setSchoolName(school.name || 'My School');
         setSchoolCode(school.school_code || '');
       } else if (userEmail) {
@@ -139,7 +132,6 @@ const AdminDashboard: React.FC = () => {
         if (results && results.length > 0) {
           schoolData = results[0];
           schoolCodeValue = schoolData.school_code || '';
-          schoolIdValue = schoolData.id;
           setSchoolName(schoolData.name || 'My School');
           setSchoolCode(schoolData.school_code || '');
         } else {
@@ -414,14 +406,6 @@ const AdminDashboard: React.FC = () => {
     return colors[type] || colors.info;
   };
 
-  const getStatusIcon = (isPublished: boolean) => {
-    return isPublished ? (
-      <CheckCircle className="w-4 h-4 text-green-500" />
-    ) : (
-      <XCircle className="w-4 h-4 text-yellow-500" />
-    );
-  };
-
   // ============================================
   // RENDER
   // ============================================
@@ -558,7 +542,12 @@ const AdminDashboard: React.FC = () => {
                 <YAxis stroke="#94a3b8" domain={[0, 100]} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                  formatter={(value: number) => [`${value.toFixed(1)}%`, 'Average']}
+                  formatter={(value: any) => {
+                    if (typeof value === 'number') {
+                      return [`${value.toFixed(1)}%`, 'Average'];
+                    }
+                    return [value, 'Average'];
+                  }}
                 />
                 <Legend />
                 <Area 
@@ -604,9 +593,12 @@ const AdminDashboard: React.FC = () => {
                 </Pie>
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                  formatter={(value: number, name: string) => {
-                    const grade = gradeDistribution.find(g => g.name === name);
-                    return [`${value} students (${grade?.percentage.toFixed(1) || 0}%)`, 'Students'];
+                  formatter={(value: any, name: any) => {
+                    if (typeof value === 'number') {
+                      const grade = gradeDistribution.find(g => g.name === name);
+                      return [`${value} students (${grade?.percentage.toFixed(1) || 0}%)`, 'Students'];
+                    }
+                    return [value, 'Students'];
                   }}
                 />
                 <Legend />
@@ -638,9 +630,11 @@ const AdminDashboard: React.FC = () => {
                 <YAxis stroke="#94a3b8" domain={[0, 100]} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                  formatter={(value: number, name: string, props: any) => {
-                    const data = props.payload;
-                    return [`${value.toFixed(1)}% (${data.students} results)`, 'Average'];
+                  formatter={(value: any) => {
+                    if (typeof value === 'number') {
+                      return [`${value.toFixed(1)}%`, 'Average'];
+                    }
+                    return [value, 'Average'];
                   }}
                 />
                 <Bar 

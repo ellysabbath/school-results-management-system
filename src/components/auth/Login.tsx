@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   GraduationCap, Lock, AlertCircle, Eye, EyeOff, 
-  Shield, User, Loader2, Mail 
+   User, Loader2, Mail 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -89,18 +89,15 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-slide-up">
-        <div className="bg-white rounded-2xl shadow-xl border border-secondary-200 p-8">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl mb-4 shadow-lg shadow-primary-500/20">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl mb-4 shadow-lg shadow-blue-500/20">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-secondary-900">Welcome Back</h1>
-            <p className="text-secondary-500 mt-1">Sign in to your school dashboard</p>
-            
-            {/* Role info - shows current user role after login */}
-           
+          
+            <p className="text-gray-500 mt-1 text-sm">Sign in to your school dashboard</p>
           </div>
 
           {error && (
@@ -115,7 +112,7 @@ const Login: React.FC = () => {
                 <button 
                   onClick={handleResendVerification}
                   disabled={isLoading}
-                  className="text-primary-600 hover:text-primary-700 font-medium text-xs whitespace-nowrap disabled:opacity-50"
+                  className="text-blue-600 hover:text-blue-700 font-medium text-xs whitespace-nowrap disabled:opacity-50"
                 >
                   {isLoading ? 'Sending...' : 'Resend'}
                 </button>
@@ -145,11 +142,11 @@ const Login: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-secondary-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Username <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <User className="absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   value={username}
@@ -159,18 +156,18 @@ const Login: React.FC = () => {
                     setRequiresVerification(false);
                   }}
                   placeholder="Enter username"
-                  className="input-field pl-10"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-secondary-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Password <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <Lock className="absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
@@ -179,13 +176,13 @@ const Login: React.FC = () => {
                     setError('');
                   }}
                   placeholder="Enter your password"
-                  className="input-field pl-10 pr-10"
+                  className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                   disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-400 hover:text-secondary-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -196,7 +193,7 @@ const Login: React.FC = () => {
             <div className="flex items-center justify-end">
               <Link 
                 to="/forgot-password" 
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
                 Forgot password?
               </Link>
@@ -205,7 +202,7 @@ const Login: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full btn-primary text-lg py-3 flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium py-3 rounded-lg hover:from-blue-600 hover:to-blue-700 transition shadow-lg hover:shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
@@ -219,15 +216,13 @@ const Login: React.FC = () => {
           </form>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-secondary-500">
+            <p className="text-sm text-gray-500">
               Don't have an account?{' '}
-              <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
+              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
                 Start Free Trial
               </Link>
             </p>
           </div>
-
-        
         </div>
       </div>
     </div>

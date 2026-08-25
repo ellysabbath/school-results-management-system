@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
-  ArrowLeft, Edit, Trash2, Mail, Phone, Calendar, MapPin, Users, 
+  ArrowLeft, Edit, Mail, Phone, Calendar, 
   BookOpen, Award, TrendingUp, Download, Printer, Share2 
 } from 'lucide-react';
 import { mockStudents, mockResults } from '../../utils/mockData';

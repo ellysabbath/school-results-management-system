@@ -17,11 +17,7 @@ import {
   MapPin,
   LayoutDashboard,
   UserPlus2Icon,
-  Smartphone,
-  Lock,
   TrendingUp,
-  BookOpen,
-  ClipboardList,
   Star,
   Clock,
   Headphones

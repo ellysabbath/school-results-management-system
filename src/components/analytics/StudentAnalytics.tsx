@@ -1,31 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  BarChart3, TrendingUp, Award, Calendar, Download,
-  ArrowUp, ArrowDown, BookOpen, Users, UserCheck,
-  Clock, Star, Target, Brain, Zap, School,
-  PieChart, Activity, Globe, Filter, Eye,
-  CheckCircle, XCircle, AlertCircle, RefreshCw,
-  Loader2, Hash, ArrowRight, FileText, BarChart,
+  BarChart3, TrendingUp, Award, Download,
+  BookOpen, Users, UserCheck,
+  School,
+  Activity, Filter,
+  AlertCircle, RefreshCw,
+  Loader2, Hash, ArrowRight,
   Search,
   X,
-  User
+  User,
+  Star
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
-  LineChart,
-  Line,
-  BarChart as ReBarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  PieChart as RePieChart,
-  Pie,
-  Cell,
   Area,
   AreaChart,
 } from 'recharts';
@@ -123,14 +115,11 @@ const getStatusColor = (percentage: number): string => {
   return 'text-red-600';
 };
 
-const COLORS = ['#22c55e', '#60a5fa', '#f59e0b', '#fb923c', '#ef4444'];
-
 // ============================================
 // MAIN COMPONENT
 // ============================================
 
 const CommonAnalytics: React.FC = () => {
-  const navigate = useNavigate();
   const { user, isAuthenticated, school } = useAuth();
 
   // ============================================
@@ -168,8 +157,6 @@ const CommonAnalytics: React.FC = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   // Derived data for charts
-  const [classPerformance, setClassPerformance] = useState<any[]>([]);
-  const [gradeDistribution, setGradeDistribution] = useState<any[]>([]);
   const [subjectPerformance, setSubjectPerformance] = useState<any[]>([]);
   const [topStudents, setTopStudents] = useState<any[]>([]);
   const [monthlyTrend, setMonthlyTrend] = useState<any[]>([]);
@@ -178,14 +165,11 @@ const CommonAnalytics: React.FC = () => {
   // DERIVED VALUES
   // ============================================
 
-  const userSchoolCode = school?.school_code || user?.school_id || null;
   const userEmail = user?.email || '';
   const userSchoolId = school?.id || (user?.school_id ? parseInt(user.school_id) : null);
 
   // Statistics
   const totalStudents = students.length;
-  const totalTeachers = teachers.length;
-  const totalSubjects = subjects.length;
   const publishedResults = results.filter(r => r.is_published);
   const totalResults = publishedResults.length;
   const averageScore = publishedResults.length > 0 
@@ -384,7 +368,7 @@ const CommonAnalytics: React.FC = () => {
       setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [userSchoolId]);
+  }, [userSchoolId, terms]);
 
   // ============================================
   // PROCESS CHART DATA
@@ -394,35 +378,12 @@ const CommonAnalytics: React.FC = () => {
     studentData: Student[],
     subjectData: Subject[],
     resultData: Result[],
-    teacherData: Teacher[]
+    _teacherData: Teacher[]
   ) => {
     // Filter by selected term
     const filteredResults = selectedTerm 
       ? resultData.filter(r => r.term === selectedTerm && r.is_published)
       : resultData.filter(r => r.is_published);
-    
-    // Class Performance
-    const classesList = [...new Set(studentData.map(s => s.student_class).filter(Boolean))];
-    const classPerf = classesList.map(cls => {
-      const studentsInClass = studentData.filter(s => s.student_class === cls);
-      const studentIds = studentsInClass.map(s => s.id);
-      const classResults = filteredResults.filter(r => studentIds.includes(r.student));
-      const avg = classResults.length > 0 
-        ? classResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / classResults.length 
-        : 0;
-      return { class: cls, average: avg, students: studentsInClass.length };
-    });
-    setClassPerformance(classPerf);
-    
-    // Grade Distribution
-    const gradeDist = [
-      { name: 'A (80-100%)', value: filteredResults.filter(r => (r.percentage || 0) >= 80).length },
-      { name: 'B (65-79%)', value: filteredResults.filter(r => (r.percentage || 0) >= 65 && (r.percentage || 0) < 80).length },
-      { name: 'C (50-64%)', value: filteredResults.filter(r => (r.percentage || 0) >= 50 && (r.percentage || 0) < 65).length },
-      { name: 'D (40-49%)', value: filteredResults.filter(r => (r.percentage || 0) >= 40 && (r.percentage || 0) < 50).length },
-      { name: 'F (0-39%)', value: filteredResults.filter(r => (r.percentage || 0) < 40).length },
-    ];
-    setGradeDistribution(gradeDist);
     
     // Subject Performance
     const subjPerf = subjectData.map(sub => {
@@ -457,7 +418,6 @@ const CommonAnalytics: React.FC = () => {
     // Monthly Trend (simulated from data)
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
     const trend = months.map((month, idx) => {
-      // Simulate trend based on actual data
       const baseValue = averageScore || 65;
       const variation = (idx - 2) * 3;
       return { month, avg: Math.min(100, Math.max(0, baseValue + variation + Math.random() * 5)) };
@@ -509,8 +469,6 @@ const CommonAnalytics: React.FC = () => {
     setCurrentSchoolInfo(null);
     setHasSearched(false);
     setSearchError(null);
-    setClassPerformance([]);
-    setGradeDistribution([]);
     setSubjectPerformance([]);
     setTopStudents([]);
   };
@@ -1007,68 +965,6 @@ const CommonAnalytics: React.FC = () => {
             {/* Overview View */}
             {viewType === 'overview' && (
               <>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 pt-0">
-                  <div className="bg-white rounded-xl border border-secondary-200 p-6">
-                    <h3 className="font-semibold text-secondary-900 mb-4">Class Performance Comparison</h3>
-                    {classPerformance.length === 0 ? (
-                      <div className="text-center py-8 text-secondary-400">
-                        <BarChart3 className="w-8 h-8 mx-auto mb-2 text-secondary-300" />
-                        <p className="text-sm">No data available</p>
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ReBarChart data={classPerformance}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="class" stroke="#94a3b8" />
-                          <YAxis stroke="#94a3b8" />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="average" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Average %" />
-                        </ReBarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  <div className="bg-white rounded-xl border border-secondary-200 p-6">
-                    <h3 className="font-semibold text-secondary-900 mb-4">Grade Distribution</h3>
-                    {gradeDistribution.every(d => d.value === 0) ? (
-                      <div className="text-center py-8 text-secondary-400">
-                        <PieChart className="w-8 h-8 mx-auto mb-2 text-secondary-300" />
-                        <p className="text-sm">No data available</p>
-                      </div>
-                    ) : (
-                      <>
-                        <ResponsiveContainer width="100%" height={300}>
-                          <RePieChart>
-                            <Pie
-                              data={gradeDistribution}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={100}
-                              paddingAngle={5}
-                              dataKey="value"
-                            >
-                              {gradeDistribution.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                          </RePieChart>
-                        </ResponsiveContainer>
-                        <div className="flex justify-center gap-4 mt-2 flex-wrap">
-                          {gradeDistribution.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-1 text-xs">
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx] }} />
-                              <span className="text-secondary-600">{item.name}: {item.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 pt-0">
                   <div className="lg:col-span-2 bg-white rounded-xl border border-secondary-200 p-6">
                     <h3 className="font-semibold text-secondary-900 mb-4">Performance Trend</h3>
