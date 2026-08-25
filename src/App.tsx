@@ -104,7 +104,11 @@ const App: React.FC = () => {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          
+          {/* IMPORTANT: Reset Password route should handle both with and without token */}
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          
           <Route path="/register-school" element={<RegisterSchool />} />
 
           {/* ==========================================
