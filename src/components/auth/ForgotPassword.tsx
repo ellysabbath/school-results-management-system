@@ -11,7 +11,7 @@ const ForgotPassword: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://resultmanagement.pythonanywhere.com/api';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -4,7 +4,7 @@ import axios from 'axios';
 // API CONFIGURATION
 // ============================================
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://resultmanagement.pythonanywhere.com/api';
 
 // ============================================
 // MAIN SCHOOL API - With Authentication
