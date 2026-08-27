@@ -20,7 +20,7 @@ const VerifyEmail: React.FC = () => {
   const [userEmail, setUserEmail] = useState(email);
   const [showPricing, setShowPricing] = useState(false);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://resultmanagement.pythonanywhere.com/api';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
   const plans = [
     {

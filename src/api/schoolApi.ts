@@ -4,7 +4,7 @@ import axios from 'axios';
 // API CONFIGURATION
 // ============================================
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://resultmanagement.pythonanywhere.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
 // ============================================
 // MAIN SCHOOL API - With Authentication
@@ -1089,7 +1089,7 @@ export const resultService = {
   },
 
   getStudentResultSummary: async (params: { student_id: number; term_id?: number }) => {
-    const response = await schoolApi.get('/report/summary/', { params });
+    const response = await schoolApi.get('/results/summary/', { params });
     return response.data;
   },
 
@@ -1097,7 +1097,7 @@ export const resultService = {
     const params: any = { student: studentId };
     if (termId) params.term = termId;
     if (schoolCode) params.school_code = schoolCode;
-    const response = await schoolApi.get('/report/', { params });
+    const response = await schoolApi.get('/results/', { params });
     return response.data;
   },
 
@@ -1105,12 +1105,12 @@ export const resultService = {
     const params: any = { subject: subjectId };
     if (termId) params.term = termId;
     if (schoolCode) params.school_code = schoolCode;
-    const response = await schoolApi.get('/report/', { params });
+    const response = await schoolApi.get('/results/', { params });
     return response.data;
   },
 
   getResultsBySchool: async (schoolCode: string, params?: any) => {
-    const response = await schoolApi.get('/report/', {
+    const response = await schoolApi.get('/results/', {
       params: { ...params, school_code: schoolCode }
     });
     return response.data;
@@ -1119,34 +1119,34 @@ export const resultService = {
   getResultsBySchoolGrouped: async (schoolCode: string, termId?: number) => {
     const params: any = { school_code: schoolCode };
     if (termId) params.term = termId;
-    const response = await schoolApi.get('/report/by-school/', { params });
+    const response = await schoolApi.get('/results/by-school/', { params });
     return response.data;
   },
 
   getResultStats: async (params?: any) => {
-    const response = await schoolApi.get('/report/stats/', { params });
+    const response = await schoolApi.get('/results/stats/', { params });
     return response.data;
   },
 
   searchResults: async (query: string, params?: any) => {
-    const response = await schoolApi.get('/report/search/', {
+    const response = await schoolApi.get('/results/search/', {
       params: { ...params, q: query }
     });
     return response.data;
   },
 
   bulkCreateResults: async (data: any[]) => {
-    const response = await schoolApi.post('/report/bulk-create/', data);
+    const response = await schoolApi.post('/results/bulk-create/', data);
     return response.data;
   },
 
   getStudentStatistics: async (studentId: number) => {
-    const response = await schoolApi.get(`/report/student/${studentId}/statistics/`);
+    const response = await schoolApi.get(`/results/student/${studentId}/statistics/`);
     return response.data;
   },
 
   getResultSummaries: async (params?: any) => {
-    const response = await schoolApi.get('/report/summaries/', { params });
+    const response = await schoolApi.get('/results/summaries/', { params });
     return response.data;
   },
 };
