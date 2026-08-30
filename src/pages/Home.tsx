@@ -18,6 +18,7 @@ import {
   UserPlus2Icon,
   Smartphone,
   Lock,
+  GraduationCap,
 } from 'lucide-react';
 
 const Home: React.FC = () => {
@@ -28,7 +29,7 @@ const Home: React.FC = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <School className="w-8 h-8 text-blue-600" />
+              <GraduationCap className="w-8 h-8 text-blue-600" />
               <span className="text-xl font-bold text-gray-800">Results Management System</span>
             </div>
             <div className="hidden md:flex items-center gap-6">

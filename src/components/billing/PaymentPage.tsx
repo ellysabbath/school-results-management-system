@@ -169,7 +169,8 @@ const PaymentPage: React.FC = () => {
         'Enter the amount shown above',
         'Enter the transaction reference',
         'Confirm the payment',
-        'Wait for confirmation SMS'
+        'Wait for confirmation SMS',
+        '+255 76969 138 4(ELISHA SABAS MWANANJELA)'
       ]
     },
     { 
@@ -184,7 +185,8 @@ const PaymentPage: React.FC = () => {
         'Enter the amount shown above',
         'Enter the transaction reference',
         'Confirm the payment',
-        'Wait for confirmation SMS'
+        'Wait for confirmation SMS',
+        '+255 702 242843 (ELISHA  SABAS MWANANJELA)'
       ]
     },
     { 
@@ -199,7 +201,8 @@ const PaymentPage: React.FC = () => {
         'Enter the amount shown above',
         'Enter the transaction reference',
         'Confirm the payment',
-        'Wait for confirmation SMS'
+        'Wait for confirmation SMS',
+        '+255 76969 138 4(ELISHA SABAS MWANANJELA)'
       ]
     },
     { 
@@ -214,7 +217,8 @@ const PaymentPage: React.FC = () => {
         'Enter the amount shown above',
         'Enter the transaction reference',
         'Confirm the payment',
-        'Wait for confirmation SMS'
+        'Wait for confirmation SMS',
+        '+255 76969 138 4(ELISHA SABAS MWANANJELA)'
       ]
     },
     { 
@@ -229,7 +233,8 @@ const PaymentPage: React.FC = () => {
         'Enter the amount shown above',
         'Enter the transaction reference',
         'Confirm the payment',
-        'Wait for confirmation SMS'
+        'Wait for confirmation SMS',
+        '+255 76969 138 4(ELISHA SABAS MWANANJELA)'
       ]
     },
     { 
@@ -244,7 +249,8 @@ const PaymentPage: React.FC = () => {
         'Enter the amount shown above',
         'Enter the transaction reference',
         'Confirm the payment',
-        'Wait for confirmation SMS'
+        'Wait for confirmation SMS',
+        '+255 76969 138 4(ELISHA SABAS MWANANJELA)'
       ]
     },
   ];
@@ -1320,7 +1326,7 @@ Thank you for your payment!
                   Go to Billing
                 </button>
                 <button
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/settings/profile')}
                   className="w-full py-3 border border-secondary-200 hover:bg-secondary-50 text-secondary-700 font-medium rounded-lg transition-colors"
                 >
                   Dashboard

@@ -8,13 +8,15 @@ import {
   MapPin, 
   Send, 
   CheckCircle, 
-  School, 
+  
   LayoutDashboard, 
   UserPlus2Icon,
   Clock,
   MessageCircle,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  GraduationCap,
+ 
 } from 'lucide-react';
 import { contactService } from '../api/contactApi';
 import toast from 'react-hot-toast';
@@ -113,7 +115,7 @@ const Contact: React.FC = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <School className="w-8 h-8 text-blue-600" />
+              <GraduationCap className="w-8 h-8 text-blue-600" />
               <span className="text-xl font-bold text-gray-800">Results Management System</span>
             </div>
             <div className="hidden md:flex items-center gap-6">
@@ -367,7 +369,7 @@ const Contact: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <School className="w-6 h-6 text-blue-400" />
+                <GraduationCap className="w-6 h-6 text-blue-400" />
                 <span className="text-lg font-bold">Results Management System</span>
               </div>
               <p className="text-gray-400 text-sm">A modern system for managing secondary school results in Tanzania.</p>

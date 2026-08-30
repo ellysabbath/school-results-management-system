@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   CheckCircle, XCircle, Loader2, Mail, Building2, ArrowRight, 
   Zap, CreditCard, Award,
-  Shield, Sparkles, Star, Crown, GraduationCap
+  Shield, Sparkles, Star, Crown, GraduationCap,
+  
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -19,6 +20,10 @@ const VerifyEmail: React.FC = () => {
   const [message, setMessage] = useState('Verifying your email...');
   const [userEmail, setUserEmail] = useState(email);
   const [showPricing, setShowPricing] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  
+  // Prevent double API calls
+  const hasVerified = useRef(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://resultmanagement.pythonanywhere.com/api';
 
@@ -53,6 +58,7 @@ const VerifyEmail: React.FC = () => {
   ];
 
   useEffect(() => {
+    // If no token, show error
     if (!token) {
       setStatus('error');
       setMessage('No verification token found');
@@ -60,44 +66,110 @@ const VerifyEmail: React.FC = () => {
       return;
     }
 
+    // Prevent double verification
+    if (hasVerified.current) {
+      console.log('Verification already attempted, skipping...');
+      return;
+    }
+
     const verifyEmail = async () => {
+      // Mark as verified to prevent double calls
+      hasVerified.current = true;
+      
       try {
+        console.log('Verifying token:', token);
+        
         const response = await axios.get(`${API_BASE_URL}/accounts/verify-email/`, {
           params: { token }
         });
 
+        console.log('Response status:', response.status);
+        console.log('Response data:', response.data);
+
+        // Handle different status responses
         if (response.data.status === 'success') {
+          // Successfully verified
           setStatus('success');
+          setMessage('Email verified successfully! Choose your plan to get started.');
+          toast.success('Email verified successfully!');
+          
+          // Extract email from response if available
+          if (response.data.data?.email) {
+            setUserEmail(response.data.data.email);
+          }
+          
+          setTimeout(() => {
+            setShowPricing(true);
+          }, 1500);
+          
+        } else if (response.data.status === 'already_verified') {
+          // Email already verified - treat as success
+          setStatus('success');
+          setMessage('Email already verified! You can log in now.');
+          toast.success('Email already verified!', {
+            icon: <CheckCircle className="w-5 h-5 text-green-500" />,
+            duration: 4000,
+          });
           
           if (response.data.data?.email) {
             setUserEmail(response.data.data.email);
           }
           
-          setMessage('Email verified successfully! Choose your plan to get started.');
-          toast.success('Email verified successfully!');
-          
-          // Show pricing after 1.5 seconds
           setTimeout(() => {
             setShowPricing(true);
           }, 1500);
           
         } else {
+          // Any other status is an error
           setStatus('error');
-          setMessage(response.data.message || 'Verification failed');
-          toast.error(response.data.message || 'Verification failed');
+          const errorMsg = response.data.message || 'Verification failed';
+          setMessage(errorMsg);
+          setErrorDetails(errorMsg);
+          toast.error(errorMsg);
         }
+        
       } catch (err: any) {
+        console.error('Verification error:', err);
+        console.error('Error response:', err.response);
+        console.error('Error data:', err.response?.data);
+        
         setStatus('error');
-        const errorMsg = err.response?.data?.message || 'Verification failed. Please try again.';
+        
+        let errorMsg = 'Verification failed. Please try again.';
+        
+        // Handle different error scenarios
+        if (err.response?.data?.message) {
+          errorMsg = err.response.data.message;
+          setErrorDetails(err.response.data.message);
+        } else if (err.response?.data?.detail) {
+          errorMsg = err.response.data.detail;
+          setErrorDetails(err.response.data.detail);
+        } else if (err.response?.status === 400) {
+          errorMsg = 'Invalid or expired verification token. Please request a new verification email.';
+          setErrorDetails('The verification link may have expired or been used already.');
+        } else if (err.response?.status === 404) {
+          errorMsg = 'Verification endpoint not found. Please contact support.';
+          setErrorDetails('The verification URL is invalid.');
+        } else if (err.code === 'ERR_NETWORK') {
+          errorMsg = 'Network error. Please check your internet connection.';
+          setErrorDetails('Unable to connect to the server.');
+        }
+        
         setMessage(errorMsg);
         toast.error(errorMsg);
+        
       } finally {
         setIsLoading(false);
       }
     };
 
     verifyEmail();
-  }, [token, navigate]);
+    
+    // Cleanup
+    return () => {
+      // No cleanup needed
+    };
+  }, [token]);
 
   const resendVerification = async () => {
     const emailInput = prompt('Please enter your email address to resend verification:');
@@ -113,6 +185,20 @@ const VerifyEmail: React.FC = () => {
         toast.success('Verification email sent! Please check your inbox.');
         setMessage('Verification email sent! Please check your inbox.');
         setUserEmail(emailInput);
+        // Reset error state and allow retry
+        setStatus('verifying');
+        setErrorDetails(null);
+        hasVerified.current = false; // Allow re-verification
+      } else if (response.data.already_verified) {
+        toast.success('Email already verified! You can log in.', {
+          icon: <CheckCircle className="w-5 h-5 text-green-500" />,
+          duration: 4000,
+        });
+        setStatus('success');
+        setMessage('Email already verified! You can log in now.');
+        setTimeout(() => {
+          setShowPricing(true);
+        }, 1500);
       } else {
         toast.error(response.data.message || 'Failed to resend verification');
       }
@@ -235,7 +321,6 @@ const VerifyEmail: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md animate-slide-up">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center">
-          {/* Header with Logo */}
           <div className="mb-6">
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl shadow-lg shadow-blue-500/20">
@@ -268,22 +353,28 @@ const VerifyEmail: React.FC = () => {
 
           <h1 className="text-2xl font-bold text-gray-800 mb-2">
             {status === 'verifying' && 'Verifying Email'}
-            {status === 'success' && 'Email Verified! 🎉'}
+            {status === 'success' && 'Email Verified'}
             {status === 'error' && 'Verification Failed'}
           </h1>
           
           <p className="text-gray-600 mb-6">{message}</p>
 
+          {status === 'error' && errorDetails && (
+            <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
+              <p className="text-sm text-red-600">
+                <strong>Error details:</strong> {errorDetails}
+              </p>
+            </div>
+          )}
+
           {status === 'success' && (
             <div className="space-y-4">
-              {userEmail && (
-                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-sm text-green-700">
-                    <CheckCircle className="w-4 h-4 inline mr-1" />
-                    {userEmail} is now verified
-                  </p>
-                </div>
-              )}
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-sm text-green-700 flex items-center justify-center gap-1">
+                  <CheckCircle className="w-4 h-4 inline" />
+                  Your email has been verified successfully!
+                </p>
+              </div>
               
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-700 font-medium flex items-center justify-center gap-2">
@@ -340,10 +431,8 @@ const VerifyEmail: React.FC = () => {
         </div>
       </div>
 
-      {/* Pricing Section - Shows after verification */}
       {status === 'success' && showPricing && renderPricingSection()}
 
-      {/* Footer */}
       {status === 'success' && showPricing && (
         <footer className="w-full mt-12 text-center text-sm text-gray-400 border-t border-gray-200 pt-6">
           <p>© 2026 SchoolManager. All rights reserved.</p>
