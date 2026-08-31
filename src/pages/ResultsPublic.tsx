@@ -123,7 +123,7 @@ const ResultsPublic: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_BASE_URL}/results/public/schools/`);
+      const response = await axios.get(`${API_BASE_URL}/results/schools/`);
       
       if (response.data.status === 'success') {
         setSchools(response.data.data || []);
@@ -146,7 +146,7 @@ const ResultsPublic: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await axios.get(
-        `${API_BASE_URL}/results/public/school/${code}/term/${term}/`
+        `${API_BASE_URL}/results/school/${code}/term/${term}/`
       );
       
       if (response.data.status === 'success') {
