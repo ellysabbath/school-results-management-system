@@ -41,6 +41,7 @@ const Pricing: React.FC = () => {
               <Link to="/features" className="text-gray-600 hover:text-blue-600 transition">Features</Link>
               <Link to="/pricing" className="text-gray-600 hover:text-blue-600 transition">Pricing</Link>
               <Link to="/contact" className="text-gray-600 hover:text-blue-600 transition">Contact</Link>
+              <Link to="/results" className="text-blue-600 font-medium hover:text-blue-700 transition">Results</Link>
               <Link to="/login" className="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
                 <LayoutDashboard className="w-4 h-4" />
                 Login

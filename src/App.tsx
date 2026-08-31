@@ -66,6 +66,7 @@ import PaymentPage from './components/billing/PaymentPage';
 import UsersAdmin from './components/super-admin/UsersAdmin';
 import ContactManagement from './pages/ContactManagement';
 import MyResults from './components/results/MyResults';
+import ResultsPublic from './pages/ResultsPublic';
 
 const App: React.FC = () => {
   return (
@@ -110,6 +111,12 @@ const App: React.FC = () => {
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           
           <Route path="/register-school" element={<RegisterSchool />} />
+
+          {/* ==========================================
+              PUBLIC RESULTS ROUTES (No Auth Required)
+              ========================================== */}
+          <Route path="/results" element={<ResultsPublic />} />
+          <Route path="/results/school/:schoolCode/term/:termId" element={<ResultsPublic />} />
 
           {/* ==========================================
               PROTECTED ROUTES - WITH LAYOUT
@@ -323,7 +330,7 @@ const App: React.FC = () => {
           } />
 
           {/* Shared Routes (Multiple Roles) */}
-          <Route path="/results" element={
+          <Route path="/results-entry" element={
             <ProtectedRoute allowedRoles={['school_admin', 'teacher']}>
               <Layout>
                 <ResultEntry />

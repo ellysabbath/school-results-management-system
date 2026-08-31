@@ -172,7 +172,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle, onClose, isMobile }
       roles: ['school_admin']
     },
     { 
-      path: '/results', 
+      path: '/results-entry', 
       label: 'Results Entry', 
       icon: ClipboardList,
       section: 'School Admin',

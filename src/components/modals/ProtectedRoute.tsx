@@ -38,12 +38,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
       // Redirect to appropriate dashboard based on role
       if (userRole === 'super_admin') {
         return <Navigate to="/dashboard" replace />;
-      } else if (userRole === 'admin') {
+      } else if (userRole === 'school_admin' || userRole === 'admin') {
         return <Navigate to="/admin-dashboard" replace />;
       } else if (userRole === 'teacher') {
         return <Navigate to="/teacher-dashboard" replace />;
       } else if (userRole === 'student') {
         return <Navigate to="/student-dashboard" replace />;
+      } else if (userRole === 'parent') {
+        return <Navigate to="/parent-dashboard" replace />;
       }
       
       // Fallback - redirect to home
